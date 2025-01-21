@@ -4,7 +4,7 @@
   <name>radar_interface</name>
   <version>0.0.0</version>
   <description>A package for interfacing the radar sensor</description>
-  <maintainer email="eemil.kulmala@oulu.fi">eemil</maintainer>
+  <maintainer email="eemil.kulmala@hotmail.com">eemil</maintainer>
   <license>Apache-2.0</license>
 
   <exec_depend>rclpy</exec_depend>

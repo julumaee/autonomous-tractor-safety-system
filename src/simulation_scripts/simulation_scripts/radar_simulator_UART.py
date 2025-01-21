@@ -3,7 +3,7 @@ import random
 import serial
 
 # Virtual UART port
-UART_PORT = '/dev/pts/5' # Adjust to match the port used!
+UART_PORT = '/dev/pts/7' # Adjust to match the port used!
 BAUD_RATE = 115200
 
 def generate_radar_data():

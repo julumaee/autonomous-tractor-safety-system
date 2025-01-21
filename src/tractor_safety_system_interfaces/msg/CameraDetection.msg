@@ -1,6 +1,7 @@
 # This is a message type defined for camera detections.
 # Detections published from the camera node will be of this type.
 
+std_msgs/Header header
 
 # Class probabilities
 vision_msgs/ObjectHypothesis[] results
@@ -18,3 +19,4 @@ bool is_tracking
 # likely differ from the id field set in each individual ObjectHypothesis.
 # If you set this field, be sure to also set is_tracking to True.
 string tracking_id
+

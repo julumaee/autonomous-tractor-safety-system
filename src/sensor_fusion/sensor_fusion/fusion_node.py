@@ -2,32 +2,39 @@ import rclpy
 from rclpy.node import Node
 
 from std_msgs.msg import String
+from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 
 
-class FusionSubscriber(Node):
+class FusionNode(Node):
 
     def __init__(self):
         super().__init__('fusion_node')
-        self.subscription = self.create_subscription(
-            String,
-            '/detections',
-            self.listener_callback,
+        self.camera_subscriber = self.create_subscription(
+            CameraDetection,
+            '/camera_detections',
+            self.listen_to_camera,
             10)
-        self.subscription  # prevent unused variable warning
+        self.radar_subscriber = self.create_subscription(
+            RadarDetection,
+            '/radar_detections',
+            self.listen_to_radar,
+            10)
         self.publisher = self.create_publisher(String, '/detections/fused', 10)
 
-    def listener_callback(self, msg):
-        
-        self.get_logger().info(msg.data)
+    def listen_to_camera(self, camera_msg):
+        self.get_logger().info(f"Received a detection from camera: {camera_msg.header.frame_id}")
+
+    def listen_to_radar(self, radar_msg):
+        self.get_logger().info(f"Received a detection from radar: {radar_msg.header.frame_id}")
 
     #def fusion_logic():
 
 
 def main(args=None):
     rclpy.init(args=args)
-    fusion_subscriber = FusionSubscriber()
-    rclpy.spin(fusion_subscriber)
-    fusion_subscriber.destroy_node()
+    fusion_node = FusionNode()
+    rclpy.spin(fusion_node)
+    fusion_node.destroy_node()
     rclpy.shutdown()
 
 

@@ -14,7 +14,7 @@ setup(
     install_requires=['setuptools', 'serial'],
     zip_safe=True,
     maintainer='eemil',
-    maintainer_email='eemil.kulmala@oulu.fi',
+    maintainer_email='eemil.kulmala@hotmail.com',
     description='A package for interfacing the camera sensor',
     license='Apache-2.0',
     tests_require=['pytest'],

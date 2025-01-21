@@ -15,6 +15,7 @@ find_package(sensor_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CameraDetection.msg"
+  "msg/RadarDetection.msg"
   DEPENDENCIES std_msgs geometry_msgs vision_msgs sensor_msgs
 )
 

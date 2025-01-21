@@ -4,7 +4,7 @@
   <name>sensor_fusion</name>
   <version>0.0.0</version>
   <description>A package for performing target-level sensor fusion</description>
-  <maintainer email="eemil.kulmala@oulu.fi">eemil</maintainer>
+  <maintainer email="eemil.kulmala@hotmail.com">eemil</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>

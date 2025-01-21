@@ -3,7 +3,7 @@
 <package format="3">
   <name>tractor_safety_system_interfaces</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Package contains custom interfaces used in the system</description>
   <maintainer email="eemil.kulmala@hotmail.com">eemil</maintainer>
   <license>Apache-2.0</license>
 

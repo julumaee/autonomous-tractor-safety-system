@@ -4,7 +4,7 @@
   <name>tractor_control</name>
   <version>0.0.0</version>
   <description>A package for sending control commands to the tractor</description>
-  <maintainer email="eemil.kulmala@oulu.fi">eemil</maintainer>
+  <maintainer email="eemil.kulmala@hotmail.com">eemil</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
