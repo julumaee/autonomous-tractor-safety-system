@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'serial'],
     zip_safe=True,
     maintainer='eemil',
     maintainer_email='eemil.kulmala@oulu.fi',
@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'camera_node = camera_interface.camera_node:main',
         ],
     },
 )

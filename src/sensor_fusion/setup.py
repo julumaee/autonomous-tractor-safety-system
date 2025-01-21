@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'fusion_node = sensor_fusion.fusion_node:main'
         ],
     },
 )
