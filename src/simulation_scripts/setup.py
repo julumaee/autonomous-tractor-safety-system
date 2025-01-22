@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             "camera_simulation = simulation_scripts.camera_simulator:main",
             "radar_simulator = simulation_scripts.radar_simulator_UART:main",
+            "agopen_simulator = simulation_scripts.agopen_simulator:main",
         ],
     },
 )

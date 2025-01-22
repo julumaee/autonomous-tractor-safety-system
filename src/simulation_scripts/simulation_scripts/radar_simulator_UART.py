@@ -8,7 +8,7 @@ BAUD_RATE = 115200
 
 def generate_radar_data():
     """Generate simulated radar data."""
-    distance = random.randint(5, 100)  # Distance in meters
+    distance = random.randint(0, 50)  # Distance in meters
     angle = random.randint(-30, 30)   # Angle in degrees
     speed = random.randint(-30, 30)   # Speed in m/s
     return distance, angle, speed

@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            "safety_monitor = safety_monitor.safety_monitor:main"
         ],
     },
 )
