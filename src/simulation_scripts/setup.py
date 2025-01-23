@@ -23,6 +23,7 @@ setup(
             "camera_simulation = simulation_scripts.camera_simulator:main",
             "radar_simulator = simulation_scripts.radar_simulator_UART:main",
             "agopen_simulator = simulation_scripts.agopen_simulator:main",
+            "target_simulator = simulation_scripts.target_to_fuse_simulator:main",
         ],
     },
 )

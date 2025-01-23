@@ -1,7 +1,8 @@
 import rclpy
+import numpy as np
 from rclpy.node import Node
 from collections import deque
-from std_msgs.msg import String
+from geometry_msgs.msg import Point
 from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection, FusedDetection
 
 
@@ -20,19 +21,27 @@ class FusionNode(Node):
             self.listen_to_radar,
             10)
         self.publisher_ = self.create_publisher(FusedDetection, '/fused_detections', 10)
-        # Queues to store recent detections
-        self.camera_detections = deque(maxlen=20)  # Limit to 20 recent detections
+
+        # Initialize variables
+        self.camera_detections = deque(maxlen=20) # Limit to 20 recent detections
         self.radar_detections = deque(maxlen=20)  # Limit to 20 recent detections
-        self.time_threshold = 1 # Set threshold for detection matching to 1 second
+        self.time_threshold = 1                   # Set time threshold for detection matching to 1 second
+        self.distance_threshold = 1.0             # Set distance threshold for detection matching to 1 meter
+
+        # Example extrinsic parameters (rotation matrix and translation vector)
+        self.R = np.array([[1, 0, 0],
+                           [0, 1, 0],
+                           [0, 0, 1]])
+        self.T = np.array([0, 0, 0])
 
     def listen_to_camera(self, camera_msg):
         self.camera_detections.append(camera_msg)
-        self.get_logger().info(f"Received a detection from camera: {camera_msg.header.frame_id}")
+        #self.get_logger().info(f"Received a detection from camera: {camera_msg.header.frame_id}")
         self.attempt_fusion()
 
     def listen_to_radar(self, radar_msg):
         self.radar_detections.append(radar_msg)
-        self.get_logger().info(f"Received a detection from radar: {radar_msg.header.frame_id}")
+        #self.get_logger().info(f"Received a detection from radar: {radar_msg.header.frame_id}")
         self.attempt_fusion()
 
     def attempt_fusion(self):
@@ -50,8 +59,19 @@ class FusionNode(Node):
                 # Check temporal proximity
                 if abs((camera_time - radar_time)) > self.time_threshold:
                     continue
-                best_match = radar_msg
-                
+
+                radar_point = Point(
+                    x=radar_msg.distance * np.cos(np.radians(radar_msg.angle)),
+                    y=radar_msg.distance * np.sin(np.radians(radar_msg.angle)),
+                    z=0
+                )
+                transformed_radar_point = self.transform_radar_to_camera(radar_point)
+                if self.is_within_bbox(transformed_radar_point, camera_msg.bbox): # Check if radar detection is in the camera detection bbox
+                    distance = np.linalg.norm([transformed_radar_point.x - camera_msg.position.x, transformed_radar_point.y - camera_msg.position.y])
+                    if distance < self.distance_threshold and distance < best_distance:
+                        best_distance = distance
+                        best_match = radar_msg
+
             if best_match:
                 fused_detection = FusedDetection()
                 fused_detection.header = camera_msg.header
@@ -71,6 +91,20 @@ class FusionNode(Node):
                 self.radar_detections.remove(best_match)
                 self.camera_detections.remove(camera_msg)
             
+    def transform_radar_to_camera(self, radar_point):
+        """Transforms radar coordinates to camera coordinates."""
+        # Convert to homogeneous coordinates
+        radar_point = np.array([radar_point.x, radar_point.y, radar_point.z, 1])
+        # Apply transformation
+        camera_coordinates = np.dot(np.hstack((self.R, self.T.reshape(-1, 1))), radar_point)
+        # Convert back to Cartesian coordinates and return as a Point()
+        return Point(x=camera_coordinates[0], y=camera_coordinates[1], z=camera_coordinates[2])
+
+    def is_within_bbox(self, point, bbox):
+        """Checks if a point is within a bounding box."""
+        x, y = point.x, point.y
+        return (bbox.center.position.x - bbox.size_x / 2 <= x <= bbox.center.position.x + bbox.size_x / 2 and
+                bbox.center.position.y - bbox.size_y / 2 <= y <= bbox.center.position.y + bbox.size_y / 2)
 
 def main(args=None):
     rclpy.init(args=args)

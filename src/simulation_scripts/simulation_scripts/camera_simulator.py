@@ -23,7 +23,7 @@ class CameraSimulator(Node):
         detection1 = SpatialDetection()
         detection1.results = []
         detection1.results = self.generate_object_hypotheses()
-        detection1.bbox = self.generate_bounding_box() # TODO does this need to be used?
+        detection1.bbox = self.generate_bounding_box() # TODO Should match the position
         detection1.position = self.generate_position()
         detection1.is_tracking = random.choice([True, False])
         if (detection1.is_tracking):
@@ -35,7 +35,7 @@ class CameraSimulator(Node):
         detection2 = SpatialDetection()
         detection2.results = []
         detection2.results = self.generate_object_hypotheses()
-        detection2.bbox = self.generate_bounding_box() # TODO does this need to be used?
+        detection2.bbox = self.generate_bounding_box()
         detection2.position = self.generate_position()
         detection2.is_tracking = random.choice([True, False])
         if (detection2.is_tracking):
