@@ -1,11 +1,8 @@
-
-######################################################################################
-### NOTE: This could be more time-efficient by a multithreaded implementation NOTE ###
-######################################################################################
-
 import rclpy
 from rclpy.node import Node
 from tractor_safety_system_interfaces.msg import FusedDetection, ControlCommand
+from rcl_interfaces.msg import SetParametersResult
+
 
 class SafetyMonitor(Node):
     def __init__(self):
@@ -21,18 +18,50 @@ class SafetyMonitor(Node):
             '/control/agopen',
             self.agopen_control,
             10)
-        self.safety_distance_1 = 40  # A distance threshold for controlling safety
-        self.safety_distance_2 = 10  # A distance threshold for controlling safety
-        self.safety_distance_3 = 3   # A distance threshold for controlling safety
-        self.speed_override_1  = 5   # A value for overriding tractor speed with if a target is inside safety_distance_1
-        self.speed_override_2  = 2   # A value for overriding tractor speed with if a target is inside safety_distance_2
-        self.speed_override_3  = 0   # Stop the tractor if a target is inside safety_distance_3
         
+        # Declare parameters with default values
+        self.declare_parameter('safety_distance_1', 40)
+        self.declare_parameter('safety_distance_2', 10)
+        self.declare_parameter('safety_distance_3', 3)
+        self.declare_parameter('speed_override_1', 5)
+        self.declare_parameter('speed_override_2', 2)
+        self.declare_parameter('speed_override_3', 0)
+
+        # Retrieve the parameter values
+        self.safety_distance_1 = self.get_parameter('safety_distance_1').value
+        self.safety_distance_2 = self.get_parameter('safety_distance_2').value
+        self.safety_distance_3 = self.get_parameter('safety_distance_3').value
+        self.speed_override_1 = self.get_parameter('speed_override_1').value
+        self.speed_override_2 = self.get_parameter('speed_override_2').value
+        self.speed_override_3 = self.get_parameter('speed_override_3').value
+
+        # Subscribe to parameter updates
+        self.add_on_set_parameters_callback(self.on_set_parameters)
+
+        # Initialize variables
         self.active_detection = False                       # By default no detections percepted
         self.speed_to_override = 0                          # A variable for overriding speed
         self.latest_steering_angle = 0                      # Default steering angle from AgOpenGPS
         self.last_detection_time = self.get_clock().now()   # Save the time of last detection
         
+
+    def on_set_parameters(self, params):
+        """Sets parameters their new values when called"""
+        for param in params:
+            if param.name == 'safety_distance_1':
+                self.safety_distance_1 = param.value
+            elif param.name == 'safety_distance_2':
+                self.safety_distance_2 = param.value
+            elif param.name == 'safety_distance_3':
+                self.safety_distance_3 = param.value
+            elif param.name == 'speed_override_1':
+                self.speed_override_1 = param.value
+            elif param.name == 'speed_override_2':
+                self.speed_override_2 = param.value
+            elif param.name == 'speed_override_3':
+                self.speed_override_3 = param.value
+        return SetParametersResult(successful=True)
+    
     def classify_detection(self, detection):
         distance = detection.distance
         self.get_logger().info(f"Received detection: {detection.header.frame_id} at distance: {distance}m")

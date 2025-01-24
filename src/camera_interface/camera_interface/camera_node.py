@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Header
-from depthai_ros_msgs.msg import SpatialDetection, SpatialDetectionArray
+from depthai_ros_msgs.msg import SpatialDetectionArray
 from tractor_safety_system_interfaces.msg import CameraDetection
 
 
@@ -17,6 +17,7 @@ class CameraNode(Node):
         self.subscription  # prevent unused variable warning
 
     def convert_message(self, oakd_msg):
+        """Converts messages from Luxonis OAKD-lite 2 to CameraMessage format"""
         camera_detectin_msg = CameraDetection()
         camera_detectin_msg.results = oakd_msg.results
         camera_detectin_msg.bbox = oakd_msg.bbox
@@ -26,6 +27,7 @@ class CameraNode(Node):
         return camera_detectin_msg
     
     def listener_callback(self, oakd_msg):
+        """Publishes detections as individual CameraDetections from a SpatialDetectionArray"""
         for detection in oakd_msg.detections:
             camera_detection_msg = self.convert_message(detection)
             camera_detection_msg.header = Header()

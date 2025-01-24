@@ -1,0 +1,27 @@
+fusion_node:
+  ros__parameters:
+    # Time threshold for detection matching
+    time_threshold: 1.0  # seconds
+
+    # Distance threshold for detection matching
+    distance_threshold: 1.0  # meters
+
+    # Rotation matrix for transforming radar coordinates to camera coordinates
+    rotation_matrix: [1.0, 0.0, 0.0,
+                      0.0, 1.0, 0.0,
+                      0.0, 0.0, 1.0]  # Default: identity matrix
+
+    # Translation vector for transforming radar coordinates to camera coordinates
+    translation_vector: [0.0, 0.0, 0.0]  # Default: no translation
+
+safety_monitor:
+  ros__parameters:
+    # Safety distances for target proximity
+    safety_distance_1: 40  # meters
+    safety_distance_2: 10  # meters
+    safety_distance_3: 3   # meters
+
+    # Speed overrides for safety distances
+    speed_override_1: 5    # override speed for safety_distance_1 (m/s)
+    speed_override_2: 2    # override speed for safety_distance_2 (m/s)
+    speed_override_3: 0    # override speed for safety_distance_3 (stop)

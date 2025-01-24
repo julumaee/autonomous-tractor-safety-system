@@ -6,6 +6,8 @@ from vision_msgs.msg import ObjectHypothesis, BoundingBox2D
 from std_msgs.msg import Header
 from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 import random
+from rcl_interfaces.msg import SetParametersResult
+
 
 class TargetSimulationNode(Node):
 
@@ -13,16 +15,36 @@ class TargetSimulationNode(Node):
         super().__init__('target_simulation_node')
         self.camera_publisher = self.create_publisher(CameraDetection, '/camera_detections', 10)
         self.radar_publisher = self.create_publisher(RadarDetection, '/radar_detections', 10)
-        self.timer = self.create_timer(2.0, self.publish_detections)  # Publish detections every second
+        self.timer = self.create_timer(2.0, self.publish_detections)  # Publish detections every 2 seconds
 
-        # Example extrinsic parameters (rotation matrix and translation vector)
-        self.R = np.array([[1, 0, 0],
-                           [0, 1, 0],
-                           [0, 0, 1]])
-        self.T = np.array([0, 0, 0])
+        # Declare parameters with default values
+        self.declare_parameter('rotation_matrix', [1.0, 0.0, 0.0,
+                                                   0.0, 1.0, 0.0,
+                                                   0.0, 0.0, 1.0])
+        self.declare_parameter('translation_vector', [0.0, 0.0, 0.0])
+
+        # Retrieve the parameter values
+        rotation_matrix_param = self.get_parameter('rotation_matrix').value
+        self.R = np.array(rotation_matrix_param).reshape(3, 3)
+        translation_vector_param = self.get_parameter('translation_vector').value
+        self.T = np.array(translation_vector_param)
+
+        # Subscribe to parameter updates
+        self.add_on_set_parameters_callback(self.on_set_parameters)
+
+    def on_set_parameters(self, params):
+        """Sets parameters their new values when called"""
+        for param in params:
+            if param.name == 'rotation_matrix':
+                rotation_matrix_param = param.value
+                self.R = np.array(rotation_matrix_param).reshape(3, 3)
+            elif param.name == 'translation_vector':
+                translation_vector_param = param.value
+                self.T = np.array(translation_vector_param)
+        return SetParametersResult(successful=True)
 
     def publish_detections(self):
-        # Generate a random target position in the world coordinate system
+        """A callback function to generate and publish targets."""
         target_position_world = self.generate_world_coordinates()
         self.publish_camera_detection(target_position_world)
         self.publish_radar_detection(target_position_world)
@@ -36,7 +58,7 @@ class TargetSimulationNode(Node):
         )
 
     def publish_camera_detection(self, world_point):
-        """Transforms world coordinates to camera coordinates, creates a camera detection and publishes it"""
+        """Creates a camera detection based on given coordinates and publishes it."""
         # Transform target world points into camera points
         world_point_homogeneous = np.array([world_point.x, world_point.y, world_point.z, 1])
         transformation_matrix = np.hstack((self.R, self.T.reshape(-1, 1)))
@@ -57,7 +79,7 @@ class TargetSimulationNode(Node):
 
     @staticmethod
     def generate_bounding_box(center):
-        """Generate a random bounding box."""
+        """Generate a random bounding box based on a given center point."""
         bbox = BoundingBox2D()
         bbox.center.position.x = center.x
         bbox.center.position.y = center.y
@@ -74,7 +96,7 @@ class TargetSimulationNode(Node):
         return [hypothesis1, hypothesis2]
 
     def publish_radar_detection(self, target_position_world):
-        """Calculates and publishes radar detection (distance and angle) based on the target position."""
+        """Calculates and publishes radar detection based on the target position."""
         distance = np.linalg.norm([target_position_world.x, target_position_world.y])
         angle = np.degrees(np.arctan2(target_position_world.y, target_position_world.x))
         speed = random.randint(-30, 30)
@@ -86,7 +108,6 @@ class TargetSimulationNode(Node):
         radar_detection.speed = speed
         self.radar_publisher.publish(radar_detection)
         self.get_logger().info(f"Published radar detection with distance {distance} and angle {angle}")
-
 
 def main(args=None):
     rclpy.init(args=args)

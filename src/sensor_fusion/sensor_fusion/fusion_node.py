@@ -4,7 +4,7 @@ from rclpy.node import Node
 from collections import deque
 from geometry_msgs.msg import Point
 from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection, FusedDetection
-
+from rcl_interfaces.msg import SetParametersResult
 
 class FusionNode(Node):
 
@@ -22,26 +22,52 @@ class FusionNode(Node):
             10)
         self.publisher_ = self.create_publisher(FusedDetection, '/fused_detections', 10)
 
-        # Initialize variables
+        # Initialize detection deques
         self.camera_detections = deque(maxlen=20) # Limit to 20 recent detections
         self.radar_detections = deque(maxlen=20)  # Limit to 20 recent detections
-        self.time_threshold = 1                   # Set time threshold for detection matching to 1 second
-        self.distance_threshold = 1.0             # Set distance threshold for detection matching to 1 meter
 
-        # Example extrinsic parameters (rotation matrix and translation vector)
-        self.R = np.array([[1, 0, 0],
-                           [0, 1, 0],
-                           [0, 0, 1]])
-        self.T = np.array([0, 0, 0])
+        # Declare parameters with default values
+        self.declare_parameter('time_threshold', 1.0)
+        self.declare_parameter('distance_threshold', 1.0)
+        self.declare_parameter('rotation_matrix', [1.0, 0.0, 0.0,
+                                                   0.0, 1.0, 0.0,
+                                                   0.0, 0.0, 1.0])
+        self.declare_parameter('translation_vector', [0.0, 0.0, 0.0])
+
+        # Retrieve parameter values
+        self.time_threshold         = self.get_parameter('time_threshold').value
+        self.distance_threshold     = self.get_parameter('distance_threshold').value
+        rotation_matrix_param       = self.get_parameter('rotation_matrix').value
+        translation_vector_param    = self.get_parameter('translation_vector').value
+        self.R = np.array(rotation_matrix_param).reshape(3, 3)
+        self.T = np.array(translation_vector_param)
+
+        # Subscribe to parameter updates
+        self.add_on_set_parameters_callback(self.on_set_parameters)
+
+    def on_set_parameters(self, params):
+        """Sets parameters their new values when called"""
+        for param in params:
+            if param.name == 'time_threshold':
+                self.time_threshold = param.value
+            elif param.name == 'distance_threshold':
+                self.distance_threshold = param.value
+            elif param.name == 'rotation_matrix':
+                rotation_matrix_param = param.value
+                self.R = np.array(rotation_matrix_param).reshape(3, 3)
+            elif param.name == 'translation_vector':
+                translation_vector_param = param.value
+                self.T = np.array(translation_vector_param)
+        return SetParametersResult(successful=True)
 
     def listen_to_camera(self, camera_msg):
         self.camera_detections.append(camera_msg)
-        #self.get_logger().info(f"Received a detection from camera: {camera_msg.header.frame_id}")
+        self.get_logger().info(f"Received a detection from camera: {camera_msg.header.frame_id}")
         self.attempt_fusion()
 
     def listen_to_radar(self, radar_msg):
         self.radar_detections.append(radar_msg)
-        #self.get_logger().info(f"Received a detection from radar: {radar_msg.header.frame_id}")
+        self.get_logger().info(f"Received a detection from radar: {radar_msg.header.frame_id}")
         self.attempt_fusion()
 
     def attempt_fusion(self):
@@ -49,14 +75,12 @@ class FusionNode(Node):
         for camera_msg in list(self.camera_detections):
             camera_time = camera_msg.header.stamp.sec + float(camera_msg.header.stamp.nanosec * 1e-9)
 
-            # Find the best radar match
-            best_match = None
-            best_distance = float('inf')
+            best_matches = [] # Store matching radar detections here
 
             for radar_msg in list(self.radar_detections):
                 radar_time = radar_msg.header.stamp.sec + float(radar_msg.header.stamp.nanosec * 1e-9)
 
-                # Check temporal proximity
+                # Temporal matching
                 if abs((camera_time - radar_time)) > self.time_threshold:
                     continue
 
@@ -66,24 +90,16 @@ class FusionNode(Node):
                     z=0
                 )
                 transformed_radar_point = self.transform_radar_to_camera(radar_point)
-                if self.is_within_bbox(transformed_radar_point, camera_msg.bbox): # Check if radar detection is in the camera detection bbox
+                # Check if radar detection is in the camera detection bbox (e.g. spatial matching)
+                if self.is_within_bbox(transformed_radar_point, camera_msg.bbox):
+                    # Calculate distance between detections
                     distance = np.linalg.norm([transformed_radar_point.x - camera_msg.position.x, transformed_radar_point.y - camera_msg.position.y])
-                    if distance < self.distance_threshold and distance < best_distance:
-                        best_distance = distance
-                        best_match = radar_msg
+                    if distance < self.distance_threshold:
+                        best_matches.append((radar_msg, distance))
 
-            if best_match:
-                fused_detection = FusedDetection()
-                fused_detection.header = camera_msg.header
-                fused_detection.results = camera_msg.results
-                fused_detection.bbox = camera_msg.bbox
-                fused_detection.position = camera_msg.position # This could be modified
-                fused_detection.is_tracking = camera_msg.is_tracking
-                fused_detection.tracking_id = camera_msg.tracking_id
-                fused_detection.distance = radar_msg.distance
-                fused_detection.angle = radar_msg.angle
-                fused_detection.speed = radar_msg.speed
-
+            if best_matches:
+                best_match, _ = min(best_matches, key=lambda x: x[1])
+                fused_detection = self.create_fused_detection(camera_msg, best_match)
                 self.publisher_.publish(fused_detection)
                 self.get_logger().info(f"Publishing fused detection with id: {fused_detection.header.frame_id}")
                 
@@ -93,6 +109,7 @@ class FusionNode(Node):
             
     def transform_radar_to_camera(self, radar_point):
         """Transforms radar coordinates to camera coordinates."""
+
         # Convert to homogeneous coordinates
         radar_point = np.array([radar_point.x, radar_point.y, radar_point.z, 1])
         # Apply transformation
@@ -105,6 +122,20 @@ class FusionNode(Node):
         x, y = point.x, point.y
         return (bbox.center.position.x - bbox.size_x / 2 <= x <= bbox.center.position.x + bbox.size_x / 2 and
                 bbox.center.position.y - bbox.size_y / 2 <= y <= bbox.center.position.y + bbox.size_y / 2)
+
+    def create_fused_detection(self, camera_msg, radar_msg):
+        """Creates a FusedDetection message from camera and radar detections."""
+        fused_detection = FusedDetection()
+        fused_detection.header = camera_msg.header
+        fused_detection.results = camera_msg.results
+        fused_detection.bbox = camera_msg.bbox
+        fused_detection.position = camera_msg.position  # Could update with radar info
+        fused_detection.is_tracking = camera_msg.is_tracking
+        fused_detection.tracking_id = camera_msg.tracking_id
+        fused_detection.distance = radar_msg.distance
+        fused_detection.angle = radar_msg.angle
+        fused_detection.speed = radar_msg.speed
+        return fused_detection
 
 def main(args=None):
     rclpy.init(args=args)
