@@ -4,7 +4,7 @@ This repository contains a ROS2 project for an autonomous tractor safety system,
 
 ## System architecture:
 
-![System architecture](image-1.png)
+![System architecture](system_architecture.png)
 
 ### Camera node
 - Connects to the camera using depth-ai
@@ -85,7 +85,7 @@ This repository contains a ROS2 project for an autonomous tractor safety system,
 
 *Safety monitor state machine:*
 
-![Safety monitor state machine](image.png)
+![Safety monitor state machine](safety_monitor_state_machine.png)
 
 ### Simulation
 - Includes nodes and/or python scripts for simulating the hardware components
