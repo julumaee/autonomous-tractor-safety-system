@@ -7,7 +7,6 @@ vision_msgs/BoundingBox2D bbox          # 2D bounding box surrounding the object
 geometry_msgs/Point position            # Center of the detected object in meters
 
 int32 distance                          # Distance in meters
-int32 angle                             # Angle in degrees
 int32 speed                             # Speed in meters per second
 
 bool is_tracking # If true, this message contains object tracking information.

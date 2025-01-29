@@ -11,7 +11,7 @@ class CameraSimulator(Node):
         super().__init__('camera_simulator')
         self.tracking_id = 1
         self.publisher_ = self.create_publisher(SpatialDetectionArray, '/oakd/detections', 10)
-        self.timer = self.create_timer(2, self.simulate_detection)
+        self.timer = self.create_timer(3, self.simulate_detection)
 
     def simulate_detection(self):
         # Create a simulated SpatialDetectionArray message with 2 detections
@@ -23,7 +23,7 @@ class CameraSimulator(Node):
         detection1 = SpatialDetection()
         detection1.results = []
         detection1.results = self.generate_object_hypotheses()
-        detection1.bbox = self.generate_bounding_box() # TODO Should match the position
+        detection1.bbox = self.generate_bounding_box() # TODO Should match the position?
         detection1.position = self.generate_position()
         detection1.is_tracking = random.choice([True, False])
         if (detection1.is_tracking):
@@ -69,9 +69,9 @@ class CameraSimulator(Node):
     def generate_position():
         """Generate a random 3D position."""
         position = Point()
-        position.x = random.uniform(1.0, 5.0)  # Depth
-        position.y = random.uniform(-1.0, 1.0)  # Left-Right
-        position.z = random.uniform(-0.5, 0.5)  # Up-Down
+        position.x = random.uniform(1.0, 15.0)  # Depth
+        position.y = random.uniform(-5.0, 5.0)  # Left-Right
+        position.z = random.uniform(-0.0, 0.0)  # Up-Down
         return position
 
 def main(args=None):

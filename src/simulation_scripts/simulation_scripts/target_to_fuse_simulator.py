@@ -8,7 +8,6 @@ from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 import random
 from rcl_interfaces.msg import SetParametersResult
 
-
 class TargetSimulationNode(Node):
 
     def __init__(self):
@@ -52,9 +51,9 @@ class TargetSimulationNode(Node):
     def generate_world_coordinates(self):
         """Generates a random target position in the world coordinate system."""
         return Point(
-            x=random.uniform(0, 10),  # Random x between 0 and 10 meters
-            y=random.uniform(-5, 5),  # Random y between -5 and 5 meters
-            z=0  # Assume target is on the ground plane
+            x=random.uniform(-50, 50),  # Random x between -50 and 50 meters
+            y=random.uniform(0, 50),  # Random y between 0 and 50 meters
+            z=0.0  # Assume target is on the ground plane
         )
 
     def publish_camera_detection(self, world_point):
@@ -98,16 +97,15 @@ class TargetSimulationNode(Node):
     def publish_radar_detection(self, target_position_world):
         """Calculates and publishes radar detection based on the target position."""
         distance = np.linalg.norm([target_position_world.x, target_position_world.y])
-        angle = np.degrees(np.arctan2(target_position_world.y, target_position_world.x))
         speed = random.randint(-30, 30)
         # Create and publish RadarDetection
         radar_detection = RadarDetection()
         radar_detection.header.stamp = self.get_clock().now().to_msg()
         radar_detection.distance = int(distance)
-        radar_detection.angle = int(angle)
+        radar_detection.position = target_position_world
         radar_detection.speed = speed
         self.radar_publisher.publish(radar_detection)
-        self.get_logger().info(f"Published radar detection with distance {distance} and angle {angle}")
+        self.get_logger().info(f"Published radar detection with distance {distance}")
 
 def main(args=None):
     rclpy.init(args=args)

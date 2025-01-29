@@ -1,10 +1,16 @@
 fusion_node:
   ros__parameters:
     # Time threshold for detection matching
-    time_threshold: 1.0  # seconds
+    time_threshold: 0.5  # seconds
 
     # Distance threshold for detection matching
     distance_threshold: 1.0  # meters
+
+    # Minimum distance to trust radar detections without fusion
+    radar_trust_min: 5
+
+    # Maximum distance to trust camera detections without fusion
+    camera_trust_max: 12
 
     # Rotation matrix for transforming radar coordinates to camera coordinates
     rotation_matrix: [1.0, 0.0, 0.0,
@@ -25,3 +31,7 @@ safety_monitor:
     speed_override_1: 5    # override speed for safety_distance_1 (m/s)
     speed_override_2: 2    # override speed for safety_distance_2 (m/s)
     speed_override_3: 0    # override speed for safety_distance_3 (stop)
+
+    # Time reset values
+    detection_active_reset_time: 5.0 # If nothing is detected for this time period, speed control is given to AgOpen
+    vehicle_stopped_reset_time: 5.0 # If no detections are inside stop distance for this time period, speed control is given to AgOpen

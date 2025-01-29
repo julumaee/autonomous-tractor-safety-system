@@ -1,12 +1,14 @@
 import rclpy
 import serial
+import numpy as np
 from rclpy.node import Node
 from std_msgs.msg import Header
 from tractor_safety_system_interfaces.msg import RadarDetection
+from struct import unpack
 
 
 # Serial port configuration
-UART_PORT = '/dev/pts/6' # Adjust to match the port used!
+UART_PORT = '/dev/pts/5' # Adjust to match the port used!
 BAUD_RATE = 115200
 
 class RadarNode(Node):
@@ -24,25 +26,40 @@ class RadarNode(Node):
 
     def process_frame(self, frame):
         """Process and decode the received UART frame."""
-        if len(frame) < 10:  # Minimum frame length
+
+        # Validate start and end bytes
+        if frame[:2] != b'\xAA\xAA' or frame[-2:] != b'\x55\x55':
+            self.get_logger().warning("Invalid frame format: Missing start or end bytes.")
             return
-        if frame[:2] != b'\xAA\xAA' or frame[-2:] != b'\x55\x55':  # Check start and end codes of SR75 UART frame format
-            return
-        # Create a RadarDetection with correct information
+        
+        payload = frame[2:-2] # Extract the relevant data
+        target_id, long_scaled, lat_scaled, vel_scaled, height_scaled = unpack('>BHHHH', payload)
+
+        # Decode scaled values back to their original units
+        distance_long = (long_scaled * 0.05) - 100  # Longitudinal distance
+        distance_lat = (lat_scaled * 0.05) - 50     # Lateral distance
+        velocity = (vel_scaled * 0.25) - 128        # Velocity
+        height = (height_scaled * 0.25) - 64        # Height
+
+        # Create and populate the RadarDetection message
         radar_detection_msg = RadarDetection()
         radar_detection_msg.header = Header()
-        radar_detection_msg.header.frame_id = f"target_{frame[2] | (frame[3] << 8)}"
+        radar_detection_msg.header.frame_id = f"target_{target_id}"
         radar_detection_msg.header.stamp = self.get_clock().now().to_msg()
-        radar_detection_msg.distance = frame[4] | (frame[5] << 8)
-        radar_detection_msg.angle = frame[6] | (frame[7] << 8) # Can be negative, handle as signed!
-        if radar_detection_msg.angle & (1 << 15):  # Check the sign bit
-            radar_detection_msg.angle -= (1 << 16)
-        radar_detection_msg.speed = frame[8] | (frame[9] << 8) # Can be negative, handle as signed!
-        if radar_detection_msg.speed & (1 << 15):  # Check the sign bit
-            radar_detection_msg.speed -= (1 << 16)
+        radar_detection_msg.position.y = distance_long
+        radar_detection_msg.position.x = distance_lat
+        radar_detection_msg.position.z = height
+        radar_detection_msg.speed = int(velocity)
+        radar_detection_msg.distance = int(np.linalg.norm(
+        [radar_detection_msg.position.x, radar_detection_msg.position.y, radar_detection_msg.position.z]
+        ))
 
         self.publisher_.publish(radar_detection_msg)
-        self.get_logger().info(f"Publishing radar detection with id: {radar_detection_msg.header.frame_id}")
+        self.get_logger().info(
+            f"Publishing radar detection: Target ID={target_id}, Long={distance_long:.2f}m, Lat={distance_lat:.2f}m, Vel={velocity:.2f}m/s"
+        )
+        #self.get_logger().info(f"Publishing radar detection with id: {radar_detection_msg.header.frame_id}")
+
 
 def main(args=None):
     rclpy.init(args=args)

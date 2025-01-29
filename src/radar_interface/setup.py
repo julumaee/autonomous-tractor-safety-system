@@ -21,7 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'radar_node_UART = radar_interface.radar_node_UART:main',
-            'radar_publisher_can = radar_interface.radar_publisher_can:main',
+            'radar_node_can = radar_interface.radar_node_can:main',
         ],
     },
 )
