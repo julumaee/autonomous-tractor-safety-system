@@ -1,6 +1,20 @@
 # ROS2 project for an autonomous tractor safety system
 
-This repository contains a ROS2 project for an autonomous tractor safety system, which relies on radar and camera sensors for object detection.
+This repository contains a ROS2 project for an autonomous tractor safety system, which relies on radar and camera sensors for object detection. The aim of this project was to create a "Version 0" grade system, which can be improved and developed in the future. Versions 0, 1 and 2 are explained below.
+
+This project is done as part of a Master's Thesis work in the University of Oulu.
+
+Component       | Version 0     | Version 1     | Version 2     |
+----------------|------------------------------|-------------------------------|--------------------------|
+Camera Node     | Working through simulation | Working with real hardware | Working with real hardware
+Radar Node      | Working through simulation | Working with real hardware | Working with real hardware
+Fusion Node     | Perform simple fusion based on detection timestamp and positions. Publish detections from single sensors if not associated with any other sensor detection. | Target propabilities added, publish detections from single sensors only if propability of the target is high enough. Simple target recognition using the camera machine vision system. | Utilize filtering to identify false detections more accurately (for example Kalman filtering). Improved object recognition algorithm using radar point-cloud data to verify detections.
+Safety Monitor  | Adjust the tractor speed, if obstacles are detected in the vision systems sight. | Adjust tractor speed when obstacles are detected in a determined distance from the tractors path, taking into account the tractor steering angle. | Adjust tractor path if needed according to detected objects.
+Tractor Control | Not implemented | Able to control tractor speed | Able to fully control the tractor based on AgOpenGPS and the safety system.
+AgOpenGPS Node  | Not implemented | Translates AgOpenGPS commands to ROS2 messages, and forwads them to the safety monitor node. | Communicates with AgOpenGPS, being able to adjust the map and assist in the path planning process.
+Simulation and testing | Tested only through simulations | Tested also in real-world environments | Tested also in real-world environments
+All components included | Functional safety in simulation. Simulated speed adjustment. | Functional safety with real hardware. Tractor speed adjustment. | Machine vision system assists in the control and path planning process providing details of the surroundings, such as obstacles in the real world. The path of the vehicle will be adjusted according to this updated map.
+
 
 ## System architecture:
 
