@@ -1,11 +1,12 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
 import serial
+from std_msgs.msg import String
 
 # Serial port configuration
-UART_PORT = '/dev/pts/11' # Adjust as needed!
+UART_PORT = '/dev/pts/11'  # Adjust as needed!
 BAUD_RATE = 115200
+
 
 class CameraReceiver(Node):
     def __init__(self):
@@ -22,21 +23,24 @@ class CameraReceiver(Node):
 
     def process_frame(self, frame):
         """Process and decode the received UART frame."""
-        if frame[:2] != b'\xAA\xAA' or frame[-2:] != b'\x55\x55':  # Check start and end codes of SR75 frame format
+        # Check start and end codes of SR75 frame format
+        if frame[:2] != b'\xAA\xAA' or frame[-2:] != b'\x55\x55':
             return
         frame_id = frame[2] | (frame[3] << 8)
         distance = frame[4] | (frame[5] << 8)
-        angle = frame[6] | (frame[7] << 8) # Can be negative, handle as signed!
+        angle = frame[6] | (frame[7] << 8)  # Can be negative, handle as signed!
         if angle & (1 << 15):  # Check the sign bit
             angle -= (1 << 16)
-        speed = frame[8] | (frame[9] << 8) # Can be negative, handle as signed!
+        speed = frame[8] | (frame[9] << 8)  # Can be negative, handle as signed!
         if speed & (1 << 15):  # Check the sign bit
             speed -= (1 << 16)
         timestamp = self.get_clock().now().to_msg()
         msg = String()
-        msg.data = f"Camera detection at time {timestamp.sec}.{timestamp.nanosec}: Frame ID: {frame_id}, Distance: {distance}, Angle: {angle}, Speed: {speed}"
+        msg.data = f'Camera detection at time {timestamp.sec}.{timestamp.nanosec}: \
+            Frame ID: {frame_id}, Distance: {distance}, Angle: {angle}, Speed: {speed}'
         self.publisher_.publish(msg)
         self.get_logger().info(msg.data)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -44,6 +48,7 @@ def main(args=None):
     rclpy.spin(camera_receiver)
     camera_receiver.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

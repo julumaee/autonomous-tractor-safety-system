@@ -1,7 +1,9 @@
-import rclpy
 import random
+
+import rclpy
 from rclpy.node import Node
 from tractor_safety_system_interfaces.msg import ControlCommand
+
 
 class AgOpenSimulator(Node):
 
@@ -16,12 +18,14 @@ class AgOpenSimulator(Node):
         command.steering_angle = random.randint(0, 50)
         self.publisher_.publish(command)
 
+
 def main(args=None):
     rclpy.init(args=args)
     agopen_simulator = AgOpenSimulator()
     rclpy.spin(agopen_simulator)
     agopen_simulator.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

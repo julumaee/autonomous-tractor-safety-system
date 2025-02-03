@@ -1,7 +1,7 @@
+from depthai_ros_msgs.msg import SpatialDetectionArray
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Header
-from depthai_ros_msgs.msg import SpatialDetectionArray
 from tractor_safety_system_interfaces.msg import CameraDetection
 
 
@@ -17,7 +17,7 @@ class CameraNode(Node):
         self.subscription  # prevent unused variable warning
 
     def convert_message(self, oakd_msg):
-        """Converts messages from Luxonis OAKD-lite 2 to CameraMessage format"""
+        """Convert messages from Luxonis OAKD-lite 2 to CameraMessage format."""
         camera_detectin_msg = CameraDetection()
         camera_detectin_msg.results = oakd_msg.results
         camera_detectin_msg.bbox = oakd_msg.bbox
@@ -25,16 +25,18 @@ class CameraNode(Node):
         camera_detectin_msg.is_tracking = oakd_msg.is_tracking
         camera_detectin_msg.tracking_id = oakd_msg.tracking_id
         return camera_detectin_msg
-    
+
     def listener_callback(self, oakd_msg):
-        """Publishes detections as individual CameraDetections from a SpatialDetectionArray"""
+        """Publish detections as individual CameraDetections from a SpatialDetectionArray."""
         for detection in oakd_msg.detections:
             camera_detection_msg = self.convert_message(detection)
             camera_detection_msg.header = Header()
             camera_detection_msg.header.stamp = self.get_clock().now().to_msg()
             camera_detection_msg.header.frame_id = camera_detection_msg.results[0].class_id
             self.publisher_.publish(camera_detection_msg)
-            self.get_logger().info(f"Publishing camera detection with id: {camera_detection_msg.header.frame_id}")
+            self.get_logger().info(f'Publishing camera detection with id: \
+                                   {camera_detection_msg.header.frame_id}')
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -42,6 +44,7 @@ def main(args=None):
     rclpy.spin(camera_node)
     camera_node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

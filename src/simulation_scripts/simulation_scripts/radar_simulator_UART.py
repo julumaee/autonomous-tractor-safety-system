@@ -1,11 +1,13 @@
-import time
 import random
-import serial
 from struct import pack
+import time
+
+import serial
 
 # Virtual UART port
-UART_PORT = '/dev/pts/4' # Adjust to match the port used!
+UART_PORT = '/dev/pts/4'  # Adjust to match the port used!
 BAUD_RATE = 115200
+
 
 def generate_radar_data():
     """Generate simulated radar data."""
@@ -16,6 +18,7 @@ def generate_radar_data():
     height = 0                                 # Ground plane
     return target_id, distance_long, distance_lat, velocity, height
 
+
 def send_radar_data():
     """Send radar data frames over the virtual UART."""
     with serial.Serial(UART_PORT, BAUD_RATE) as ser:
@@ -23,8 +26,13 @@ def send_radar_data():
             target_id, distance_long, distance_lat, velocity, height = generate_radar_data()
             frame = format_uart_frame(target_id, distance_long, distance_lat, velocity, height)
             ser.write(frame)
-            print(f"Sent data: Target ID: {target_id}, Long: {distance_long:.2f}, Lat: {distance_lat:.2f}, Vel: {velocity:.2f}, Height: {height:.2f}")
+            print(f'Sent data: Target ID: {target_id}, \
+                  Long: {distance_long:.2f}, \
+                  Lat: {distance_lat:.2f}, \
+                  Vel: {velocity:.2f}, \
+                  Height: {height:.2f}')
             time.sleep(2)  # Send data every 2s
+
 
 def format_uart_frame(target_id, distance_long, distance_lat, velocity, height):
     """Format a UART data frame based on the protocol."""

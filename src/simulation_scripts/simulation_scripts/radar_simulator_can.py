@@ -1,15 +1,18 @@
-import time
 import random
+import time
+
 import can
+
 
 def generate_radar_data():
     """Generate simulated radar data."""
-    cluster_id = random.randint(0, 255)        # Cluster ID: 0-255 (8 bits)
-    dist_long = random.uniform(-100, 100)     # Longitudinal distance in meters
-    dist_lat = random.uniform(-50, 50)        # Lateral distance in meters
-    vrel_long = random.uniform(-30, 30)       # Relative velocity in m/s
+    cluster_id = random.randint(0, 255)       # Cluster ID: 0-255 (8 bits)
+    dist_long = random.randint(0, 50)         # Longitudinal distance in meters
+    dist_lat = random.randint(-50, 50)        # Lateral distance in meters
+    vrel_long = random.randint(-30, 30)       # Relative velocity in m/s
     height = 0.0
     return cluster_id, dist_long, dist_lat, vrel_long, height
+
 
 def send_radar_data():
     """Send radar data frames over the virtual CAN bus."""
@@ -25,11 +28,16 @@ def send_radar_data():
 
         try:
             bus.send(msg)
-            print(f"Sent Radar Frame: ID={cluster_id}, Long={dist_long:.2f}m, Lat={dist_lat:.2f}m, Vel={vrel_long:.2f}m/s, Height={height:.2f}m")
+            print(f'Sent Radar Frame: ID={cluster_id}, \
+                  Long={dist_long}m, \
+                  Lat={dist_lat}m, \
+                  Vel={vrel_long}m/s, \
+                  Height={height}m')
         except can.CanError as e:
-            print(f"Failed to send frame: {e}")
+            print(f'Failed to send frame: {e}')
 
         time.sleep(2)  # Send data every 2 seconds
+
 
 def format_radar_frame(cluster_id, dist_long, dist_lat, vrel_long, height):
     """Format a radar CAN frame based on the specified bit layout."""
@@ -62,10 +70,11 @@ def format_radar_frame(cluster_id, dist_long, dist_lat, vrel_long, height):
     # Bytes 6-7: Height (remaining 6 bits) dynProp (3 bits) and RCS (8 bits)
     frame[6] = ((height_scaled & 0x0F) << 4) & 0xF0  # Height (remaining bits)
     frame[6] |= (dyn_prop << 1) & 0x0E  # DynProp (3 bits, shifted left 1)
-    
+
     frame[7] = 0x00  # RCS set to 0
 
     return bytes(frame)
+
 
 if __name__ == '__main__':
     send_radar_data()

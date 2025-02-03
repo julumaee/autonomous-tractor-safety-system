@@ -20,11 +20,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "camera_simulation = simulation_scripts.camera_simulator:main",
-            "radar_simulator = simulation_scripts.radar_simulator_UART:main",
-            "radar_simulator_can = simulation_scripts.radar_simulator_can:main",
-            "agopen_simulator = simulation_scripts.agopen_simulator:main",
-            "target_simulator = simulation_scripts.target_to_fuse_simulator:main",
+            'camera_simulation = simulation_scripts.camera_simulator:main',
+            'radar_simulator = simulation_scripts.radar_simulator_UART:main',
+            'radar_simulator_can = simulation_scripts.radar_simulator_can:main',
+            'agopen_simulator = simulation_scripts.agopen_simulator:main',
+            'target_simulator = simulation_scripts.target_to_fuse_simulator:main',
         ],
     },
 )
