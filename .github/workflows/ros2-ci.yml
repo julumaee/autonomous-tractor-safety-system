@@ -23,6 +23,7 @@ jobs:
       shell: bash
       run: |
         apt update
+        apt install -y ros-jazzy-vision-msgs
         rosdep update
         rosdep install --from-paths src --ignore-src -r -y
 
