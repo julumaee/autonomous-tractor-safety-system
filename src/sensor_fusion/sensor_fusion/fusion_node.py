@@ -61,9 +61,9 @@ class FusionNode(Node):
             elif param.name == 'distance_threshold':
                 self.distance_threshold = param.value
             elif param.name == 'camera_trust_max':
-                self.distance_threshold = param.value
+                self.camera_trust_max = param.value
             elif param.name == 'radar_trust_min':
-                self.distance_threshold = param.value
+                self.radar_trust_min = param.value
             elif param.name == 'rotation_matrix':
                 rotation_matrix_param = param.value
                 self.R = np.array(rotation_matrix_param).reshape(3, 3)
@@ -139,9 +139,11 @@ class FusionNode(Node):
                 if camera_detection_distance < self.camera_trust_max:
                     modified_camera_msg = FusedDetection()
                     modified_camera_msg.bbox = camera_msg.bbox
+                    modified_camera_msg.position = camera_msg.position
                     modified_camera_msg.distance = int(camera_detection_distance)
                     modified_camera_msg.is_tracking = camera_msg.is_tracking
                     modified_camera_msg.tracking_id = camera_msg.tracking_id
+                    modified_camera_msg.detection_type = 'camera'
                     self.publisher_.publish(modified_camera_msg)
                 self.camera_detections.remove(camera_msg)
 
@@ -163,7 +165,9 @@ class FusionNode(Node):
         modified_radar_msg = FusedDetection()
         modified_radar_msg.header = radar_msg.header
         modified_radar_msg.distance = radar_msg.distance
+        modified_radar_msg.speed = radar_msg.speed
         modified_radar_msg.position = self.transform_radar_to_camera(radar_msg.position)
+        modified_radar_msg.detection_type = 'radar'
         self.publisher_.publish(modified_radar_msg)
 
     def create_fused_detection(self, camera_msg, radar_msg):
@@ -177,6 +181,7 @@ class FusionNode(Node):
         fused_detection.tracking_id = camera_msg.tracking_id
         fused_detection.distance = radar_msg.distance
         fused_detection.speed = radar_msg.speed
+        fused_detection.detection_type = 'fused'
         return fused_detection
 
 

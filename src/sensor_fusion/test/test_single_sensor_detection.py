@@ -8,7 +8,7 @@ from std_msgs.msg import Header
 from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 
 
-class TestFusionNode(unittest.TestCase):
+class TestSingleSensorDetection(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -25,11 +25,11 @@ class TestFusionNode(unittest.TestCase):
         self.fusion_node = FusionNode()
 
         # Mock publisher output
-        self.published_fusions = []
+        self.published_detections = []
 
         def mock_publisher(fused_msg):
             """Mock method to capture published messages."""
-            self.published_fusions.append(fused_msg)
+            self.published_detections.append(fused_msg)
 
         self.fusion_node.publisher_.publish = mock_publisher
 
@@ -43,22 +43,24 @@ class TestFusionNode(unittest.TestCase):
         msg.tracking_id = tracking_id
         return msg
 
-    def create_radar_detection(self, x, y, z, distance, speed, frame_id='test_radar'):
+    def create_radar_detection(self, x, y, z, speed, frame_id='test_radar'):
         """Create a RadarDetection message."""
         msg = RadarDetection()
         msg.header = Header()
         msg.header.stamp.sec = 1
         msg.header.stamp.nanosec = 0
         msg.position = Point(x=x, y=y, z=z)
-        msg.distance = distance
+        msg.distance = (x**2 + y**2)/0.5
         msg.speed = speed
         msg.header.frame_id = frame_id
         return msg
 
-    def test_fusion_performs_correctly(self):
-        """Ensure that radar and camera detections are correctly fused and published."""
-        camera_msg = self.create_camera_detection(3.0, 12.0, 0.0)
-        radar_msg = self.create_radar_detection(3.1, 12.1, 0.0, distance=11, speed=2)
+    def test_single_detection_handling(self):
+        """Ensure correct handling of individual radar and camera detections."""
+        # Create a camera detection passing the trust threshold
+        camera_msg = self.create_camera_detection(3.0, 3.0, 0.0)
+        # Create a radar detection passing the trust threshold
+        radar_msg = self.create_radar_detection(10.0, 20.0, 0.0, speed=2)
 
         # Override parameters for testing
         self.fusion_node.time_threshold = 0.5
@@ -68,30 +70,44 @@ class TestFusionNode(unittest.TestCase):
         self.fusion_node.R = np.eye(3)  # Identity matrix (no rotation)
         self.fusion_node.T = np.zeros(3)  # No translation
 
-        # Add detections to the fusion node
-        self.fusion_node.camera_detections.append(camera_msg)
+        # Add radar detection to the fusion node
         self.fusion_node.radar_detections.append(radar_msg)
 
-        # Perform fusion
+        # Attempt fusion
         self.fusion_node.attempt_fusion()
 
-        # Check if fusion was published
-        self.assertEqual(len(self.published_fusions), 1,
-                         msg='Fusion should have been published once.')
+        # Add camera detection to the fusion node
+        self.fusion_node.camera_detections.append(camera_msg)
 
-        # Verify that the fused detection has expected values
-        fused_detection = self.published_fusions[0]
+        # Attempt fusion
+        self.fusion_node.attempt_fusion()
 
-        self.assertEqual(fused_detection.tracking_id, camera_msg.tracking_id,
-                         msg='Fused detection should retain camera tracking ID')
-        self.assertAlmostEqual(fused_detection.position.x, radar_msg.position.x, places=2,
+        # Check if both detections have been published
+        self.assertEqual(len(self.published_detections), 2,
+                         msg='Both detections should have been published.')
+
+        # Verify that the sent detections have expected values
+        radar_detection = self.published_detections[0]
+
+        self.assertEqual(radar_detection.detection_type, 'radar',
+                         msg='Sent radar detection should be of type radar')
+        self.assertAlmostEqual(radar_detection.position.x, radar_msg.position.x, places=2,
                                msg='Fused position X should match radar')
-        self.assertAlmostEqual(fused_detection.position.y, radar_msg.position.y, places=2,
+        self.assertAlmostEqual(radar_detection.position.y, radar_msg.position.y, places=2,
                                msg='Fused position Y should match radar')
-        self.assertEqual(fused_detection.distance, radar_msg.distance,
+        self.assertEqual(radar_detection.distance, radar_msg.distance,
                          msg='Fused distance should match radar')
-        self.assertEqual(fused_detection.speed, radar_msg.speed,
+        self.assertEqual(radar_detection.speed, radar_msg.speed,
                          msg='Fused speed should match radar')
+
+        camera_detection = self.published_detections[1]
+
+        self.assertEqual(camera_detection.detection_type, 'camera',
+                         msg='Sent radar detection should be of type camera')
+        self.assertAlmostEqual(camera_detection.position.x, camera_msg.position.x, places=2,
+                               msg='Position X should match camera')
+        self.assertAlmostEqual(camera_detection.position.y, camera_msg.position.y, places=2,
+                               msg='Position Y should match camera')
 
 
 if __name__ == '__main__':
