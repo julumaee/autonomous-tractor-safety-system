@@ -1,3 +1,25 @@
+##############################################################################################
+#                                                                                            #
+# This module contains a set of unit tests for the FusionNode class, which is part of the    #
+# tractor safety system. The tests are designed to ensure that the FusionNode correctly      #
+# processes and fuses camera and radar detection data.                                       #
+#                                                                                            #
+# Classes:                                                                                   #
+#    TestFusionNode: A unittest.TestCase subclass that contains tests for the FusionNode     #
+#    class.                                                                                  #
+#                                                                                            #
+# Methods:                                                                                   #
+#    setUpClass(cls): Initializes ROS2 before any test is run.                               #
+#    tearDownClass(cls): Shuts down ROS2 after all tests are completed.                      #
+#    setUp(self): Initializes a FusionNode instance with a mocked publisher.                 #
+#    create_camera_detection(self, x, y, z, tracking_id): Creates a CameraDetection message. #
+#    create_radar_detection(self, x, y, z, distance, speed, frame_id): Creates a             #
+#    RadarDetection message.                                                                 #
+#    test_fusion_performs_correctly(self): Ensures that radar and camera detections are      #
+#    correctly fused and published.                                                          #
+#                                                                                            #
+##############################################################################################
+
 import unittest
 
 from geometry_msgs.msg import Point

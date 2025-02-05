@@ -16,6 +16,7 @@ class CameraSimulator(Node):
         self.timer = self.create_timer(3, self.simulate_detection)
 
     def simulate_detection(self):
+        """Simulate detections and publish them as SpatialDetectionArray message."""
         # Create a simulated SpatialDetectionArray message with 2 detections
         detection_array = SpatialDetectionArray()
         detection_array.header = Header()

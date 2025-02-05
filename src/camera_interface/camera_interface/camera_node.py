@@ -12,7 +12,7 @@ class CameraNode(Node):
         self.subscription = self.create_subscription(
             SpatialDetectionArray,
             '/oakd/detections',
-            self.listener_callback,
+            self.publish_detections,
             10)
         self.subscription  # prevent unused variable warning
 
@@ -26,7 +26,7 @@ class CameraNode(Node):
         camera_detectin_msg.tracking_id = oakd_msg.tracking_id
         return camera_detectin_msg
 
-    def listener_callback(self, oakd_msg):
+    def publish_detections(self, oakd_msg):
         """Publish detections as individual CameraDetections from a SpatialDetectionArray."""
         for detection in oakd_msg.detections:
             camera_detection_msg = self.convert_message(detection)
