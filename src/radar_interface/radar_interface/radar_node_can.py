@@ -5,13 +5,13 @@ from std_msgs.msg import Header
 from tractor_safety_system_interfaces.msg import RadarDetection
 
 
-class RadarPublisher(Node):
+class RadarNode(Node):
 
     def __init__(self):
         super().__init__('radar_publisher')
         self.publisher_ = self.create_publisher(RadarDetection, '/radar_detections', 10)
         # Set up the CAN interface with vcan0 and socketcan
-        self.bus = can.interface.Bus(channel='vcan0', bustype='socketcan')
+        self.bus = can.interface.Bus(channel='vcan0', interface='socketcan')
         self.frame_buffer = {}
         self.listen_to_can()
 
@@ -85,7 +85,7 @@ class RadarPublisher(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    radar_publisher = RadarPublisher()
+    radar_publisher = RadarNode()
     rclpy.spin(radar_publisher)
     radar_publisher.destroy_node()
     rclpy.shutdown()

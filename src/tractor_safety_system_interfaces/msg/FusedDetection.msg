@@ -18,4 +18,5 @@ string tracking_id
 
 # Type of detection. Used to differentiate between
 # fused, radar, and camera detections.
+# Valid values are "fused", "radar", and "camera".
 string detection_type

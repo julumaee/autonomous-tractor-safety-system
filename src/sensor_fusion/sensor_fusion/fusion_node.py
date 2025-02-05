@@ -83,6 +83,7 @@ class FusionNode(Node):
 
     def attempt_fusion(self):
         """Match radar and camera detections, and perform fusion if a match is found."""
+        # If no camera detections, publish radar detections without fusion
         if not self.camera_detections:
             for radar_msg in list(self.radar_detections):
                 if radar_msg.distance > self.radar_trust_min:
@@ -121,30 +122,26 @@ class FusionNode(Node):
                         self.publish_radar_detection(radar_msg)
                     self.radar_detections.remove(radar_msg)
             if best_matches:
+                # If matches were found, fuse the best match
                 best_match, _ = min(best_matches, key=lambda x: x[1])
                 fused_detection = self.create_fused_detection(camera_msg, best_match)
                 self.publisher_.publish(fused_detection)
                 self.get_logger().info(f'Publishing fused detection with id: \
                                        {fused_detection.header.frame_id}')
 
-                # Remove the radar and camera detections from deques
+                # Remove radar and camera detections from deques
                 for radar_msg, _ in best_matches:
                     if radar_msg in self.radar_detections:
                         self.radar_detections.remove(radar_msg)
                 self.camera_detections.remove(camera_msg)
             else:
+                # Publish camera detection if it is inside the trusted distance
                 camera_detection_distance = np.linalg.norm(
                     [camera_msg.position.x, camera_msg.position.y, camera_msg.position.z])
-                # Publish camera detection if it is inside the trusted distance
                 if camera_detection_distance < self.camera_trust_max:
-                    modified_camera_msg = FusedDetection()
-                    modified_camera_msg.bbox = camera_msg.bbox
-                    modified_camera_msg.position = camera_msg.position
-                    modified_camera_msg.distance = int(camera_detection_distance)
-                    modified_camera_msg.is_tracking = camera_msg.is_tracking
-                    modified_camera_msg.tracking_id = camera_msg.tracking_id
-                    modified_camera_msg.detection_type = 'camera'
-                    self.publisher_.publish(modified_camera_msg)
+                    self.publish_camera_detection(camera_msg, camera_detection_distance)
+
+                # Remove camera detection from deque
                 self.camera_detections.remove(camera_msg)
 
     def transform_radar_to_camera(self, radar_point):
@@ -169,6 +166,16 @@ class FusionNode(Node):
         modified_radar_msg.position = self.transform_radar_to_camera(radar_msg.position)
         modified_radar_msg.detection_type = 'radar'
         self.publisher_.publish(modified_radar_msg)
+
+    def publish_camera_detection(self, camera_msg, camera_detection_distance):
+        modified_camera_msg = FusedDetection()
+        modified_camera_msg.bbox = camera_msg.bbox
+        modified_camera_msg.position = camera_msg.position
+        modified_camera_msg.distance = int(camera_detection_distance)
+        modified_camera_msg.is_tracking = camera_msg.is_tracking
+        modified_camera_msg.tracking_id = camera_msg.tracking_id
+        modified_camera_msg.detection_type = 'camera'
+        self.publisher_.publish(modified_camera_msg)
 
     def create_fused_detection(self, camera_msg, radar_msg):
         """Create a FusedDetection message from camera and radar detections."""
