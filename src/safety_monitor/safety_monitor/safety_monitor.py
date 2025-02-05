@@ -5,19 +5,23 @@ from tractor_safety_system_interfaces.msg import ControlCommand, FusedDetection
 
 
 class SafetyMonitor(Node):
+
     def __init__(self):
         super().__init__('safety_monitor')
         self.publisher_ = self.create_publisher(ControlCommand, '/control', 10)
         self.detection_subscription = self.create_subscription(
             FusedDetection,
             '/fused_detections',
-            self.classify_detection,
+            self.control_speed_state,
             10)
         self.agopen_subscription = self.create_subscription(
             ControlCommand,
             '/control/agopen',
             self.agopen_control,
             10)
+
+        # Control the vehicle state every 0.1 seconds
+        self.timer = self.create_timer(0.1, self.state_control)
 
         # Declare parameters with default values
         self.declare_parameter('safety_distance_1', 40)
@@ -54,7 +58,7 @@ class SafetyMonitor(Node):
             elif param.name == 'safety_distance_2':
                 self.safety_distance_2 = param.value
             elif param.name == 'stop_distance':
-                self.safety_distance_3 = param.value
+                self.stop_distance = param.value
             elif param.name == 'speed_override_1':
                 self.speed_override_1 = param.value
             elif param.name == 'speed_override_2':
@@ -65,7 +69,7 @@ class SafetyMonitor(Node):
                 self.vehicle_stopped_reset_time = param.value
         return SetParametersResult(successful=True)
 
-    def classify_detection(self, detection):
+    def control_speed_state(self, detection):
         distance = detection.distance
         self.get_logger().info(f'Received detection: \
                                {detection.header.frame_id} at distance: {distance}m')
@@ -97,7 +101,7 @@ class SafetyMonitor(Node):
         stop_cmd.steering_angle = self.latest_steering_angle
         self.publisher_.publish(stop_cmd)
 
-    def agopen_control(self, agopen_cmd):
+    def state_control(self):
         # Reset active_detection if nothing detected for more than 5 seconds
         current_time = self.get_clock().now()
         time_diff = (current_time - self.last_detection_time).nanoseconds / 1e9
@@ -107,14 +111,21 @@ class SafetyMonitor(Node):
                     1e9 > self.vehicle_stopped_reset_time):
                 self.vehicle_state = 'slow'
                 self.last_detection_time = current_time  # Reset timer to delay speed change
-        else:
+        elif self.vehicle_state == 'slow':
             if time_diff > self.detection_active_reset_time:
-                if (self.vehicle_state == 'slow'):
-                    self.vehicle_state = 'moderate'
-                    self.last_detection_time = current_time  # Reset timer to delay speed change
-                else:
-                    self.vehicle_state = 'agopen'
+                self.vehicle_state = 'moderate'
+                self.last_detection_time = current_time  # Reset timer to delay speed change
+        elif self.vehicle_state == 'moderate':
+            if time_diff > self.detection_active_reset_time:
+                self.vehicle_state = 'agopen'
+        elif self.vehicle_state == 'agopen':
+            pass
+        else:
+            self.vehicle_state = 'stopped'
+            self.send_stop_command
+            self.get_logger().info('Vehicle in unknown state. Stopping the vehicle.')
 
+    def agopen_control(self, agopen_cmd):
         if self.vehicle_state == 'agopen':
             # Forward AgOpenGPS commands if no active detections
             self.get_logger().info('No active detections, forwarding AgOpenGPS control commands.')
