@@ -45,10 +45,15 @@ class SafetyMonitor(Node):
         self.add_on_set_parameters_callback(self.on_set_parameters)
 
         # Initialize variables
-        self.vehicle_state = 'agopen'  # Vehicle state: 'agopen, moderate, slow or stopped'
+        self.vehicle_state = 'agopen'   # Vehicle state: 'agopen, moderate, slow or stopped'
         self.latest_steering_angle = 0  # Latest steering angle from AgOpenGPS
-        self.last_detection_time = self.get_clock().now()   # Save the time of last detection
-        self.stop_time = self.get_clock().now()             # Save the time when vehicle stopped
+        self.stop_time = self.get_clock().now()  # Save the time when vehicle stopped
+
+        # Time of last detection inside safety_distance_1
+        self.last_detection_time_1 = self.get_clock().now()
+
+        # Time of last detection inside safety_distance_2
+        self.last_detection_time_2 = self.get_clock().now()
 
     def on_set_parameters(self, params):
         """Set parameters their new values."""
@@ -77,20 +82,19 @@ class SafetyMonitor(Node):
         # Modify the vehicle state based on received target distance
         if distance <= self.stop_distance:
             self.stop_time = self.get_clock().now()
-            self.last_detection_time = self.get_clock().now()
 
             if self.vehicle_state != 'stopped':
                 self.send_stop_command
                 self.vehicle_state = 'stopped'
 
         elif distance <= self.safety_distance_2:
-            self.last_detection_time = self.get_clock().now()
+            self.last_detection_time_2 = self.get_clock().now()
 
             if (self.vehicle_state != 'stopped'):
                 self.vehicle_state = 'slow'
 
         elif distance <= self.safety_distance_1:
-            self.last_detection_time = self.get_clock().now()
+            self.last_detection_time_2 = self.get_clock().now()
 
             if self.vehicle_state not in ['stopped', 'slow']:
                 self.vehicle_state = 'moderate'
@@ -104,19 +108,20 @@ class SafetyMonitor(Node):
     def state_control(self):
         # Reset active_detection if nothing detected for more than 5 seconds
         current_time = self.get_clock().now()
-        time_diff = (current_time - self.last_detection_time).nanoseconds / 1e9
+        time_diff_1 = (current_time - self.last_detection_time_1).nanoseconds / 1e9
+        time_diff_2 = (current_time - self.last_detection_time_2).nanoseconds / 1e9
         if self.vehicle_state == 'stopped':
             if ((self.get_clock().now() -
                     self.stop_time).nanoseconds /
                     1e9 > self.vehicle_stopped_reset_time):
                 self.vehicle_state = 'slow'
-                self.last_detection_time = current_time  # Reset timer to delay speed change
+                self.last_detection_time_2 = current_time  # Reset timer to delay speed change
         elif self.vehicle_state == 'slow':
-            if time_diff > self.detection_active_reset_time:
+            if time_diff_2 > self.detection_active_reset_time:
                 self.vehicle_state = 'moderate'
-                self.last_detection_time = current_time  # Reset timer to delay speed change
+                self.last_detection_time_1 = current_time  # Reset timer to delay speed change
         elif self.vehicle_state == 'moderate':
-            if time_diff > self.detection_active_reset_time:
+            if time_diff_1 > self.detection_active_reset_time:
                 self.vehicle_state = 'agopen'
         elif self.vehicle_state == 'agopen':
             pass
@@ -139,17 +144,29 @@ class SafetyMonitor(Node):
                                     (self.get_clock().now() -
                                      self.stop_time).nanoseconds / 1e9} seconds.')
         elif self.vehicle_state == 'slow':
-            self.get_logger().info(f'Vehicle in state "slow", \
-                                   overriding AgOpenGPS speed command to \
-                                   {self.speed_override_2}.')
-            agopen_cmd.speed = self.speed_override_2
+            if (agopen_cmd.speed > self.speed_override_2):
+                agopen_cmd.speed = self.speed_override_2
+                self.get_logger().info(f'Vehicle in state "slow", \
+                                       overriding AgOpenGPS speed command to \
+                                       {self.speed_override_2}.')
+            else:
+                self.get_logger().info(f'Vehicle in state "slow", \
+                                       but agopen speed is under \
+                                       {self.speed_override_2}\
+                                       . Forwarding AgOpenGPS control commands.')
             self.publisher_.publish(agopen_cmd)
             self.latest_steering_angle = agopen_cmd.steering_angle
         elif self.vehicle_state == 'moderate':
-            self.get_logger().info(f'Vehicle in state "moderate" , \
-                                   overriding AgOpenGPS speed command to \
-                                   {self.speed_override_1}.')
-            agopen_cmd.speed = self.speed_override_1
+            if (agopen_cmd.speed > self.speed_override_1):
+                agopen_cmd.speed = self.speed_override_1
+                self.get_logger().info(f'Vehicle in state "moderate" , \
+                                       overriding AgOpenGPS speed command to \
+                                       {self.speed_override_1}.')
+            else:
+                self.get_logger().info(f'Vehicle in state "moderate", \
+                                       but agopen speed is under \
+                                       {self.speed_override_1}\
+                                       . Forwarding AgOpenGPS control commands.')
             self.publisher_.publish(agopen_cmd)
             self.latest_steering_angle = agopen_cmd.steering_angle
         else:

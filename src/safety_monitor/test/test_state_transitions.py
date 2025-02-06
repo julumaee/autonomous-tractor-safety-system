@@ -1,22 +1,21 @@
 ##############################################################################################
 #                                                                                            #
-# This module contains a set of unit tests for the FusionNode class, which is part of the    #
-# tractor safety system. The tests are designed to ensure that the FusionNode correctly      #
-# processes and fuses camera and radar detection data.                                       #
+# This module contains a set of unit tests for the SafetyMonitor class, which is part of the #
+# tractor safety system. The tests are designed to ensure that the SafetyMonitor correctly   #
+# processes fused detection data and transitions vehicle states accordingly.                 #
 #                                                                                            #
 # Classes:                                                                                   #
-#    TestFusionNode: A unittest.TestCase subclass that contains tests for the FusionNode     #
+#    TestFusionNode: A unittest.TestCase subclass that contains tests for the SafetyMonitor  #
 #    class.                                                                                  #
 #                                                                                            #
 # Methods:                                                                                   #
 #    setUpClass(cls): Initializes ROS2 before any test is run.                               #
 #    tearDownClass(cls): Shuts down ROS2 after all tests are completed.                      #
-#    setUp(self): Initializes a FusionNode instance with a mocked publisher.                 #
-#    create_camera_detection(self, x, y, z, tracking_id): Creates a CameraDetection message. #
-#    create_radar_detection(self, x, y, z, distance, speed, frame_id): Creates a             #
-#    RadarDetection message.                                                                 #
-#    test_fusion_performs_correctly(self): Ensures that radar and camera detections are      #
-#    correctly fused and published.                                                          #
+#    setUp(self): Initializes a SafetyMonitor instance for testing.                          #
+#    create_fused_detection(self, distance): Creates a FusedDetection message with the       #
+#    given distance.                                                                         #
+#    test_safety_monitor_state_transitions(self): Ensures that the safety monitor states     #
+#    transition correctly based on the detection distances.                                  #
 #                                                                                            #
 ##############################################################################################
 
@@ -106,20 +105,21 @@ class TestFusionNode(unittest.TestCase):
 
         # ... to 'agopen', when active_detection_reset_time has passed
         self.safety_monitor.vehicle_state = 'moderate'
-        detection = self.create_fused_detection(30)  # Inside safety_distance_2
+        detection = self.create_fused_detection(30)  # Inside safety_distance_1
         self.safety_monitor.control_speed_state(detection)
         self.assertEqual(self.safety_monitor.vehicle_state, 'moderate',
                          msg="Vehicle state should be 'moderate'\
-                         when detection is inside safety_distance_2")
+                         when detection is inside safety_distance_1")
         # Simulate waiting for active_detection_reset_time
-        self.safety_monitor.last_detection_time = \
+        self.safety_monitor.last_detection_time_1 = \
             self.safety_monitor.get_clock().now() \
             - rclpy.duration.Duration(
                 seconds=self.safety_monitor.detection_active_reset_time + 1)
         self.safety_monitor.state_control()
         self.assertEqual(self.safety_monitor.vehicle_state, 'agopen',
                          msg="Vehicle state should be 'agopen'\
-                         when active_detection_reset_time has passed")
+                         when active_detection_reset_time has passed \
+                         and the state was 'moderate'")
 
         # Test that the vehicle state transitions from 'slow'...
 
@@ -139,14 +139,15 @@ class TestFusionNode(unittest.TestCase):
                          msg="Vehicle state should be 'slow'\
                          when detection is inside safety_distance_2")
         # Simulate waiting for active_detection_reset_time
-        self.safety_monitor.last_detection_time = \
+        self.safety_monitor.last_detection_time_2 = \
             self.safety_monitor.get_clock().now() \
             - rclpy.duration.Duration(
                 seconds=self.safety_monitor.detection_active_reset_time + 1)
         self.safety_monitor.state_control()
         self.assertEqual(self.safety_monitor.vehicle_state, 'moderate',
                          msg="Vehicle state should be 'moderate'\
-                         when active_detection_reset_time has passed")
+                         when active_detection_reset_time has passed \
+                         and the state was 'slow'")
 
         # Test that the vehicle state transitions from 'stopped'...
 
@@ -164,7 +165,8 @@ class TestFusionNode(unittest.TestCase):
         self.safety_monitor.state_control()
         self.assertEqual(self.safety_monitor.vehicle_state, 'slow',
                          msg="Vehicle state should be 'slow'\
-                         when vehicle_stopped_reset_time has passed")
+                         when vehicle_stopped_reset_time has passed \
+                         and the state was 'stopped")
 
         # Test that the vehicle state transitions to 'stopped',
         # if the state is unknown
