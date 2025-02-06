@@ -26,7 +26,7 @@ from safety_monitor.safety_monitor import SafetyMonitor
 from tractor_safety_system_interfaces.msg import FusedDetection
 
 
-class TestFusionNode(unittest.TestCase):
+class TestSafetyMonitorStates(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):

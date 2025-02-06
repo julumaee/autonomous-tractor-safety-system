@@ -25,7 +25,7 @@ from safety_monitor.safety_monitor import SafetyMonitor
 from tractor_safety_system_interfaces.msg import ControlCommand
 
 
-class TestFusionNode(unittest.TestCase):
+class TestSafetyMonitorCommands(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -46,7 +46,7 @@ class TestFusionNode(unittest.TestCase):
 
         def mock_publisher(control_cmd):
             """Mock method to capture published messages."""
-            self.published_fusions.append(control_cmd)
+            self.published_commands.append(control_cmd)
 
         self.safety_monitor.publisher_.publish = mock_publisher
 
@@ -59,34 +59,39 @@ class TestFusionNode(unittest.TestCase):
 
     def test_safety_monitor_speed_override(self):
         """Ensure that the safety monitor states transition correctly."""
-        # Override the default parameters for testing
         self.safety_monitor.speed_override_1 = 5
         self.safety_monitor.speed_override_2 = 2
         control_cmd = self.create_agopen_command(10, 0)
 
         # Test overriding speed when in state 'moderate'
-        self.safety_monitor.state = 'moderate'
+        self.safety_monitor.vehicle_state = 'moderate'
         self.safety_monitor.agopen_control(control_cmd)
+        self.assertEqual(len(self.published_commands), 1,
+                         msg='Control command not published in state moderate')
         self.assertEqual(self.published_commands[0].speed,
                          self.safety_monitor.speed_override_1,
                          msg='Speed override 1 not applied in state moderate')
-        
+
         # Test overriding speed when in state 'slow'
-        self.safety_monitor.state = 'slow'
+        self.safety_monitor.vehicle_state = 'slow'
         self.safety_monitor.agopen_control(control_cmd)
+        self.assertEqual(len(self.published_commands), 2,
+                         msg='Control command not published in state slow')
         self.assertEqual(self.published_commands[1].speed,
                          self.safety_monitor.speed_override_2,
                          msg='Speed override 2 not applied in state slow')
-        
+
         # Test overriding agopen commands when in state 'stopped'
-        self.safety_monitor.state = 'stopped'
+        self.safety_monitor.vehicle_state = 'stopped'
         self.safety_monitor.agopen_control(control_cmd)
         self.assertEqual(len(self.published_commands), 2,
                          msg='Control commands should not be published in state stopped')
 
         # Test overrriding agopen commands when in unknown state
-        self.safety_monitor.state = 'anything'
+        self.safety_monitor.vehicle_state = 'anything'
         self.safety_monitor.agopen_control(control_cmd)
+        self.assertEqual(len(self.published_commands), 3,
+                         msg='Stop command not published in unknown state')
         self.assertEqual(self.published_commands[2].speed, 0,
                          msg='Vehicle should be stopped in unknown state')
 

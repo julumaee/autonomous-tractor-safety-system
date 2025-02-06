@@ -84,7 +84,7 @@ class SafetyMonitor(Node):
             self.stop_time = self.get_clock().now()
 
             if self.vehicle_state != 'stopped':
-                self.send_stop_command
+                self.send_stop_command()
                 self.vehicle_state = 'stopped'
 
         elif distance <= self.safety_distance_2:
@@ -127,7 +127,7 @@ class SafetyMonitor(Node):
             pass
         else:
             self.vehicle_state = 'stopped'
-            self.send_stop_command
+            self.send_stop_command()
             self.get_logger().info('Vehicle in unknown state. Stopping the vehicle.')
 
     def agopen_control(self, agopen_cmd):
@@ -170,7 +170,7 @@ class SafetyMonitor(Node):
             self.publisher_.publish(agopen_cmd)
             self.latest_steering_angle = agopen_cmd.steering_angle
         else:
-            self.send_stop_command
+            self.send_stop_command()
             self.get_logger().info('Vehicle in unknown state. Stopping the vehicle.')
 
 
