@@ -18,6 +18,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RadarDetection.msg"
   "msg/FusedDetection.msg"
   "msg/ControlCommand.msg"
+  "msg/SimulatedObject.msg"
   DEPENDENCIES std_msgs geometry_msgs vision_msgs sensor_msgs
 )
 

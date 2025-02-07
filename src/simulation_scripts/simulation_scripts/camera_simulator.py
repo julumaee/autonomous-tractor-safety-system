@@ -5,50 +5,45 @@ from geometry_msgs.msg import Point
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Header
+from tractor_safety_system_interfaces.msg import SimulatedObject
 from vision_msgs.msg import BoundingBox2D, ObjectHypothesis
 
 
 class CameraSimulator(Node):
     def __init__(self):
         super().__init__('camera_simulator')
-        self.tracking_id = 1
         self.publisher_ = self.create_publisher(SpatialDetectionArray, '/oakd/detections', 10)
-        self.timer = self.create_timer(3, self.simulate_detection)
+        self.object_subscription = self.create_subscription(
+            SimulatedObject,
+            '/simulated_objects',
+            self.simulate_detection,
+            10)
 
-    def simulate_detection(self):
+    def simulate_detection(self, simulated_object):
         """Simulate detections and publish them as SpatialDetectionArray message."""
         # Create a simulated SpatialDetectionArray message with 2 detections
-        detection_array = SpatialDetectionArray()
-        detection_array.header = Header()
-        detection_array.header.stamp = self.get_clock().now().to_msg()
-        detection_array.header.frame_id = 'oakd_camera_frame'
-        # Detection 1:
-        detection1 = SpatialDetection()
-        detection1.results = []
-        detection1.results = self.generate_object_hypotheses()
-        detection1.bbox = self.generate_bounding_box()  # TODO Should match the position?
-        detection1.position = self.generate_position()
-        detection1.is_tracking = random.choice([True, False])
-        if (detection1.is_tracking):
-            detection1.tracking_id = f'object_{self.tracking_id}'
-            self.tracking_id += 1  # Update tracking_id
-        detection_array.detections.append(detection1)  # Add detection to the array
+        distance = (simulated_object.position.x ** 2 + simulated_object.position.y ** 2) ** 0.5
+        if distance > 15:
+            self.get_logger().info(f'Object is too far away: {distance}m')
+        else:
+            detection_array = SpatialDetectionArray()
+            detection_array.header = Header()
+            detection_array.header.stamp = self.get_clock().now().to_msg()
+            detection_array.header.frame_id = 'oakd_camera_frame'
 
-        # Detection 2:
-        detection2 = SpatialDetection()
-        detection2.results = []
-        detection2.results = self.generate_object_hypotheses()
-        detection2.bbox = self.generate_bounding_box()
-        detection2.position = self.generate_position()
-        detection2.is_tracking = random.choice([True, False])
-        if (detection2.is_tracking):
-            detection2.tracking_id = f'object_{self.tracking_id}'
-            self.tracking_id += 1  # Update tracking_id
-        detection_array.detections.append(detection2)  # Add detection to the array
+            detection = SpatialDetection()
+            detection.results = []
+            detection.results = self.generate_object_hypotheses()
+            detection.bbox = self.generate_bounding_box()  # TODO Should match the position?
+            detection.position = simulated_object.position
+            detection.is_tracking = random.choice([True, False])
+            if (detection.is_tracking):
+                detection.tracking_id = f'object_{simulated_object.object_id}'
+            detection_array.detections.append(detection)  # Add detection to the array
 
-        # Publish the message
-        self.publisher_.publish(detection_array)
-        self.get_logger().info(f'Published 2 detections as {detection_array.header.frame_id}')
+            # Publish the message
+            self.publisher_.publish(detection_array)
+            self.get_logger().info(f'Published a detection as {detection_array.header.frame_id}')
 
     @staticmethod
     def generate_object_hypotheses():

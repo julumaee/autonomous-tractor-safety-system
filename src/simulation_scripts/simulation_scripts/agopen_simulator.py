@@ -10,7 +10,7 @@ class AgOpenSimulator(Node):
     def __init__(self):
         super().__init__('agopen_simulator')
         self.publisher_ = self.create_publisher(ControlCommand, '/control/agopen', 10)
-        self.timer = self.create_timer(0.5, self.simulate_control)
+        self.timer = self.create_timer(1, self.simulate_control)
 
     def simulate_control(self):
         command = ControlCommand()
