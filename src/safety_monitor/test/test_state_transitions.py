@@ -103,13 +103,27 @@ class TestSafetyMonitorStates(unittest.TestCase):
                          msg="Vehicle state should be 'stopped'\
                          when detection is inside stop_distance")
 
-        # ... to 'agopen', when active_detection_reset_time has passed
+        # ... to 'agopen', ONLY when active_detection_reset_time has passed
+        self.safety_monitor.last_detection_time_1 = \
+            self.safety_monitor.last_detection_time_1 -\
+            rclpy.duration.Duration(
+                seconds=self.safety_monitor.detection_active_reset_time + 1
+            )
+        self.safety_monitor.last_detection_time_2 = \
+            self.safety_monitor.last_detection_time_2 -\
+            rclpy.duration.Duration(
+                seconds=self.safety_monitor.detection_active_reset_time + 1
+            )
         self.safety_monitor.vehicle_state = 'moderate'
         detection = self.create_fused_detection(30)  # Inside safety_distance_1
         self.safety_monitor.control_speed_state(detection)
         self.assertEqual(self.safety_monitor.vehicle_state, 'moderate',
                          msg="Vehicle state should be 'moderate'\
                          when detection is inside safety_distance_1")
+        self.safety_monitor.state_control()
+        self.assertEqual(self.safety_monitor.vehicle_state, 'moderate',
+                         msg='Vehicle state should not change\
+                         when active_detection_reset_time has not passed')
         # Simulate waiting for active_detection_reset_time
         self.safety_monitor.last_detection_time_1 = \
             self.safety_monitor.get_clock().now() \
@@ -131,13 +145,27 @@ class TestSafetyMonitorStates(unittest.TestCase):
                          msg="Vehicle state should be 'stopped'\
                          when detection is inside stop_distance")
 
-        # ... to 'moderate', when active_detection_reset_time has passed
+        # ... to 'moderate', ONLY when active_detection_reset_time has passed
+        self.safety_monitor.last_detection_time_1 = \
+            self.safety_monitor.last_detection_time_1 -\
+            rclpy.duration.Duration(
+                seconds=self.safety_monitor.detection_active_reset_time + 1
+            )
+        self.safety_monitor.last_detection_time_2 = \
+            self.safety_monitor.last_detection_time_2 -\
+            rclpy.duration.Duration(
+                seconds=self.safety_monitor.detection_active_reset_time + 1
+            )
         self.safety_monitor.vehicle_state = 'slow'
         detection = self.create_fused_detection(5)  # Inside safety_distance_2
         self.safety_monitor.control_speed_state(detection)
         self.assertEqual(self.safety_monitor.vehicle_state, 'slow',
                          msg="Vehicle state should be 'slow'\
                          when detection is inside safety_distance_2")
+        self.safety_monitor.state_control()
+        self.assertEqual(self.safety_monitor.vehicle_state, 'slow',
+                         msg='Vehicle state should not change\
+                         when active_detection_reset_time has not passed')
         # Simulate waiting for active_detection_reset_time
         self.safety_monitor.last_detection_time_2 = \
             self.safety_monitor.get_clock().now() \
@@ -151,12 +179,20 @@ class TestSafetyMonitorStates(unittest.TestCase):
 
         # Test that the vehicle state transitions from 'stopped'...
 
-        # ... to 'slow', when stopped_reset_time has passed
+        # ... to 'slow', ONLY when stopped_reset_time has passed
+        self.safety_monitor.stop_time = \
+            self.safety_monitor.stop_time -\
+            rclpy.duration.Duration(
+                seconds=self.safety_monitor.vehicle_stopped_reset_time + 1)
         detection = self.create_fused_detection(1)
         self.safety_monitor.control_speed_state(detection)
         self.assertEqual(self.safety_monitor.vehicle_state, 'stopped',
                          msg="Vehicle state should be 'stopped'\
                          when detection is inside stop_distance")
+        self.safety_monitor.state_control()
+        self.assertEqual(self.safety_monitor.vehicle_state, 'stopped',
+                         msg='Vehicle state should not change\
+                         when active_detection_reset_time has not passed')
         # Simulate waiting for vehicle_stopped_reset_time
         self.safety_monitor.stop_time = \
             self.safety_monitor.get_clock().now() \

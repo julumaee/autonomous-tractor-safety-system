@@ -94,7 +94,7 @@ class SafetyMonitor(Node):
                 self.vehicle_state = 'slow'
 
         elif distance <= self.safety_distance_1:
-            self.last_detection_time_2 = self.get_clock().now()
+            self.last_detection_time_1 = self.get_clock().now()
 
             if self.vehicle_state not in ['stopped', 'slow']:
                 self.vehicle_state = 'moderate'
@@ -103,6 +103,7 @@ class SafetyMonitor(Node):
         stop_cmd = ControlCommand()
         stop_cmd.speed = 0
         stop_cmd.steering_angle = self.latest_steering_angle
+        self.stop_time = self.get_clock().now()
         self.publisher_.publish(stop_cmd)
 
     def state_control(self):
