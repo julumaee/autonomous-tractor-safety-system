@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'simulation_scripts'
+package_name = 'simulations'
 
 setup(
     name=package_name,
@@ -20,12 +20,12 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'camera_simulator = simulation_scripts.camera_simulator:main',
-            'radar_simulator_UART = simulation_scripts.radar_simulator_UART:main',
-            'radar_simulator_can = simulation_scripts.radar_simulator_can:main',
-            'agopen_simulator = simulation_scripts.agopen_simulator:main',
-            'target_to_fuse_simulator = simulation_scripts.target_to_fuse_simulator:main',
-            'object_simulator = simulation_scripts.simulate_objects:main',
+            'camera_simulator = simulations.camera_simulator:main',
+            'radar_simulator_UART = simulations.radar_simulator_UART:main',
+            'radar_simulator_can = simulations.radar_simulator_can:main',
+            'agopen_simulator = simulations.agopen_simulator:main',
+            'target_to_fuse_simulator = simulations.target_to_fuse_simulator:main',
+            'object_simulator = simulations.simulate_objects:main',
         ],
     },
 )
