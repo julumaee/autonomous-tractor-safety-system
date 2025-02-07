@@ -168,6 +168,32 @@ class TestSafetyMonitorStates(unittest.TestCase):
                          when vehicle_stopped_reset_time has passed \
                          and the state was 'stopped")
 
+        # Test that the vehicle state doesn't change...
+
+        # ... when the detection is outside the safety_distance_1 parameter
+        self.safety_monitor.vehicle_state = 'agopen'
+        detection = self.create_fused_detection(50)
+        self.safety_monitor.control_speed_state(detection)
+        self.assertEqual(self.safety_monitor.vehicle_state, 'agopen',
+                         msg='Vehicle state should not change\
+                         when detection is outside safety_distance_1')
+
+        # ... when state is slow and detection is outside safety_distance_2
+        self.safety_monitor.vehicle_state = 'slow'
+        detection = self.create_fused_detection(12)
+        self.safety_monitor.control_speed_state(detection)
+        self.assertEqual(self.safety_monitor.vehicle_state, 'slow',
+                         msg='Vehicle state should not change\
+                         when detection is outside safety_distance_2')
+
+        # ... on detections when state is stopped
+        self.safety_monitor.vehicle_state = 'stopped'
+        detection = self.create_fused_detection(5)
+        self.safety_monitor.control_speed_state(detection)
+        self.assertEqual(self.safety_monitor.vehicle_state, 'stopped',
+                         msg="Vehicle state should not change\
+                         from detections when the state is 'stopped'")
+
         # Test that the vehicle state transitions to 'stopped',
         # if the state is unknown
         self.safety_monitor.vehicle_state = 'anything_else'
