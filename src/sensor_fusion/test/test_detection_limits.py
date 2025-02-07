@@ -15,8 +15,8 @@
 #    create_camera_detection(self, x, y, z, tracking_id): Creates a CameraDetection message. #
 #    create_radar_detection(self, x, y, z, distance, speed, frame_id): Creates a             #
 #    RadarDetection message.                                                                 #
-#    test_fusion_performs_correctly(self): Ensures that radar and camera detections are      #
-#    correctly fused and published.                                                          #
+#    test_untrusted_detections_handling(self): Ensures that untrusted radar and camera       #
+#    detections are handled correctly.                                                       #
 #                                                                                            #
 ##############################################################################################
 
@@ -77,8 +77,8 @@ class TestFusionNode(unittest.TestCase):
         msg.header.frame_id = frame_id
         return msg
 
-    def test_fusion_performs_correctly(self):
-        """Ensure that radar and camera detections are correctly fused and published."""
+    def test_untrusted_detections_handling(self):
+        """Ensure that untrusted radar and camera detections are handled correctly."""
         camera_too_far = self.create_camera_detection(20.0, 30.0, 0.0)
         radar_too_close = self.create_radar_detection(1.0, 0.0, 0.0, distance=1, speed=2)
 
