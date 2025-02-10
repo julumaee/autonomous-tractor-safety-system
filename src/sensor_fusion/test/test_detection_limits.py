@@ -30,7 +30,7 @@ from std_msgs.msg import Header
 from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 
 
-class TestFusionNode(unittest.TestCase):
+class TestDetectionLimits(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):

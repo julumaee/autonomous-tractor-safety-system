@@ -72,9 +72,9 @@ class RadarNode(Node):
 
                 self.publisher_.publish(radar_detection_msg)
                 self.get_logger().info(
-                    f'Published RadarDetection: ID={cluster_id}, \
-                        Distance={radar_detection_msg.distance}, \
-                        Speed={vrel_long:.2f}m/s'
+                    f'Published RadarDetection: ID={cluster_id}, '
+                    f'Distance={radar_detection_msg.distance}, '
+                    f'Speed={vrel_long:.2f}m/s'
                 )
             else:
                 self.get_logger().debug(f'Received message with unknown ID: {message_id}')
@@ -85,9 +85,9 @@ class RadarNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    radar_publisher = RadarNode()
-    rclpy.spin(radar_publisher)
-    radar_publisher.destroy_node()
+    radar_node = RadarNode()
+    rclpy.spin(radar_node)
+    radar_node.destroy_node()
     rclpy.shutdown()
 
 

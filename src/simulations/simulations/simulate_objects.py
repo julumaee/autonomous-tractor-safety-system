@@ -15,12 +15,12 @@ class ObjectSimulator(Node):
         self.timer = self.create_timer(2, self.simulate_detection)
 
         # Declare parameters with default values
-        self.declare_parameter('min_x', 0)
-        self.declare_parameter('min_y', -10)
-        self.declare_parameter('min_z', 0)
-        self.declare_parameter('max_x', 50)
-        self.declare_parameter('max_y', 10)
-        self.declare_parameter('max_z', 0)
+        self.declare_parameter('min_x', 0.0)
+        self.declare_parameter('min_y', -10.0)
+        self.declare_parameter('min_z', 0.0)
+        self.declare_parameter('max_x', 50.0)
+        self.declare_parameter('max_y', 10.0)
+        self.declare_parameter('max_z', 0.0)
 
         # Retrieve the parameter values
         self.min_x = self.get_parameter('min_x').value
@@ -56,8 +56,8 @@ class ObjectSimulator(Node):
         simulated_object.object_id = random.randint(0, 255)  # Object ID: 0-255
         simulated_object.position = self.generate_position()
         self.publisher_.publish(simulated_object)
-        self.get_logger().info(f'Published a simulated object with ID=\
-                               {simulated_object.object_id}')
+        self.get_logger().info('Published a simulated object with ID='
+                               f'{simulated_object.object_id}')
 
     def generate_position(self):
         """Generate a random 3D position."""

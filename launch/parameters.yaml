@@ -22,6 +22,7 @@ fusion_node:
 
 safety_monitor:
   ros__parameters:
+  
     # Safety distances for target proximity
     safety_distance_1: 40  # meters
     safety_distance_2: 10  # meters
@@ -35,3 +36,13 @@ safety_monitor:
     # Time reset values
     detection_active_reset_time: 5.0 # If nothing is detected for this time period, speed control is given to AgOpen
     vehicle_stopped_reset_time: 5.0 # If no detections are inside stop distance for this time period, speed control is given to AgOpen
+
+object_simulator:
+  ros__parameters:
+    # Min and max coordinate values for object simulator
+    min_x: 0.0
+    min_y: -10.0
+    min_z: 0.0
+    max_x: 50.0
+    max_y: 10.0
+    max_z: 0.0

@@ -34,8 +34,8 @@ class CameraNode(Node):
             camera_detection_msg.header.stamp = self.get_clock().now().to_msg()
             camera_detection_msg.header.frame_id = camera_detection_msg.results[0].class_id
             self.publisher_.publish(camera_detection_msg)
-            self.get_logger().info(f'Publishing camera detection with id: \
-                                   {camera_detection_msg.header.frame_id}')
+            self.get_logger().info('Publishing camera detection with id: '
+                                   f'{camera_detection_msg.header.frame_id}')
 
 
 def main(args=None):

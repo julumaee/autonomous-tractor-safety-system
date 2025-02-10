@@ -59,11 +59,9 @@ class RadarNode(Node):
 
         self.publisher_.publish(radar_detection_msg)
         self.get_logger().info(
-            f'Publishing radar detection: Target ID={target_id}, \
-                Long={distance_long:.2f}m, Lat={distance_lat:.2f}m, Vel={velocity:.2f}m/s'
+            f'Publishing radar detection: Target ID={target_id}, '
+            f'Long={distance_long:.2f}m, Lat={distance_lat:.2f}m, Vel={velocity:.2f}m/s'
         )
-        # self.get_logger().info(f'Publishing radar \
-        # detection with id: {radar_detection_msg.header.frame_id}')
 
 
 def main(args=None):

@@ -78,8 +78,8 @@ class FusionNode(Node):
 
     def listen_to_radar(self, radar_msg):
         self.radar_detections.append(radar_msg)
-        self.get_logger().info(f'Received a detection from radar: \
-                               {radar_msg.header.frame_id}')
+        self.get_logger().info('Received a detection from radar: '
+                               f'{radar_msg.header.frame_id}')
 
     def attempt_fusion(self):
         """Match radar and camera detections, and perform fusion if a match is found."""
@@ -126,8 +126,8 @@ class FusionNode(Node):
                 best_match, _ = min(best_matches, key=lambda x: x[1])
                 fused_detection = self.create_fused_detection(camera_msg, best_match)
                 self.publisher_.publish(fused_detection)
-                self.get_logger().info(f'Publishing fused detection with id: \
-                                       {fused_detection.header.frame_id}')
+                self.get_logger().info('Publishing fused detection with id: '
+                                       f'{fused_detection.header.frame_id}')
 
                 # Remove radar and camera detections from deques
                 for radar_msg, _ in best_matches:
@@ -166,6 +166,8 @@ class FusionNode(Node):
         modified_radar_msg.position = self.transform_radar_to_camera(radar_msg.position)
         modified_radar_msg.detection_type = 'radar'
         self.publisher_.publish(modified_radar_msg)
+        self.get_logger().info('Publishing radar detection at distance: '
+                               f'{modified_radar_msg.distance}')
 
     def publish_camera_detection(self, camera_msg, camera_detection_distance):
         modified_camera_msg = FusedDetection()
@@ -176,6 +178,8 @@ class FusionNode(Node):
         modified_camera_msg.tracking_id = camera_msg.tracking_id
         modified_camera_msg.detection_type = 'camera'
         self.publisher_.publish(modified_camera_msg)
+        self.get_logger().info('Publishing camera detection at distance: '
+                               f'{modified_camera_msg.distance}')
 
     def create_fused_detection(self, camera_msg, radar_msg):
         """Create a FusedDetection message from camera and radar detections."""

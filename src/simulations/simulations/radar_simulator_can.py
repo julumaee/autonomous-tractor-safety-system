@@ -32,13 +32,9 @@ class RadarSimulator(Node):
 
         try:
             self.bus.send(msg)
-            print(f'Sent Radar Frame: ID={cluster_id}, \
-                Long={dist_long}m, \
-                Lat={dist_lat}m, \
-                Vel={vrel_long}m/s, \
-                Height={height}m')
+            self.get_logger().info(f'Sent Radar Frame: ID={cluster_id}')
         except can.CanError as e:
-            print(f'Failed to send frame: {e}')
+            self.get_logger().info(f'Failed to send frame: {e}')
 
     @staticmethod
     def format_radar_frame(cluster_id, dist_long, dist_lat, vrel_long, height):
