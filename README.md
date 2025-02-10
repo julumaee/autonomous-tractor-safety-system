@@ -6,14 +6,14 @@ This project is done as part of a Master's Thesis work in the University of Oulu
 
 Component       | Version 0     | Version 1     | Version 2     |
 ----------------|------------------------------|-------------------------------|--------------------------|
-Camera Node     | Working through simulation | Working with real hardware | Working with real hardware
-Radar Node      | Working through simulation | Working with real hardware | Working with real hardware
-Fusion Node     | Perform simple fusion based on detection timestamp and positions. Publish detections from single sensors if not associated with any other sensor detection. | Target propabilities added, publish detections from single sensors only if propability of the target is high enough. Simple target recognition using the camera machine vision system. | Utilize filtering to identify false detections more accurately (for example Kalman filtering). Improved object recognition algorithm using radar point-cloud data to verify detections.
+Camera Node     | Full functionality | Full functionality | Full functionality
+Radar Node      | Full functionality | Full functionality | Full functionality
+Fusion Node     | Perform simple fusion based on detection timestamp and positions. Publish detections from single sensors if not associated with any other sensor detection, and the detection is inside trusted detection limits. | Target propabilities added, publish detections from single sensors only if propability of the target is high enough. Simple target recognition using the camera machine vision system. | Utilize filtering to identify false detections more accurately (for example Kalman filtering). Improved object recognition algorithm using radar point-cloud data to verify detections.
 Safety Monitor  | Adjust the tractor speed, if obstacles are detected in the vision systems sight. | Adjust tractor speed when obstacles are detected in a determined distance from the tractors path, taking into account the tractor steering angle. | Adjust tractor path if needed according to detected objects.
-Tractor Control | Receives ControlCommands, but doesn't forward them | Able to control tractor speed, but steering angle comes straight from AgOpenGPS | Able to fully control the tractor based on AgOpenGPS and the safety system.
-AgOpenGPS Node  | Not implemented | Translates AgOpenGPS commands to ROS2 messages, and forwads them to the safety monitor node. | Communicates with AgOpenGPS, being able to adjust the map and assist in the path planning process.
-Simulation and testing | Tested only through simulations | Tested also in real-world environments | Tested also in real-world environments
-All components included | Functional safety in simulation. Simulated speed adjustment. | Functional safety with real hardware. Tractor speed adjustment. | Machine vision system assists in the control and path planning process providing details of the surroundings, such as obstacles in the real world. The path of the vehicle will be adjusted according to this updated map.
+Tractor Control | Receives ControlCommands, but doesn't forward them | Able to control tractor speed through ISOBUS, but steering angle comes straight from AgOpenGPS. | Able to fully control the tractor based on AgOpenGPS and the safety system through ISOBUS.
+AgOpenGPS Node  | Only simulated | Translates AgOpenGPS commands to ROS2 messages, and forwads them to the safety monitor node. | Communicates with AgOpenGPS, being able to adjust the map and assist in the path planning process.
+Simulation and testing | Simple tests to the safety system without integrating to the tractor | Tested in real working environments,integrated into the tractor. | Tested in real working environments, integrated into the tractor.
+All components included | Provides simulated functional safety with speed adjustment. | Provides functional safety with real tractor speed adjustment through ISOBUS. | Machine vision system assists in the control and path planning process providing details of the surroundings, such as obstacles in the real world. The path of the vehicle will be adjusted according to this updated map. Full tractor control through ISOBUS.
 
 
 ## System architecture:g
@@ -39,17 +39,17 @@ All components included | Functional safety in simulation. Simulated speed adjus
             - X, y and z in meters
         - Is_tracking
             - Boolean value for determining if the object is being tracked or not.
-            - Not used in Version 0 but will be used in Version 1.
+            - Not used in Version 0, but will be used in Version 1.
         - Tracking_id
             - A unique id for a tracked object.
-            - Not used in Version 0 but will be used in Version 1.
+            - Not used in Version 0, but will be used in Version 1.
         - Bbox
             - A bounding box surrounding the object.
             - Of type BoundingBox2D
-            - Not used in Version 0 but can be utilized later
+            - Not used in Version 0, but can be utilized later
 - Subscribes to topic “/oakd/detections”
     - This is the topic where oak-d s2 will publish its detections
-- Publishes camera data in the ROS topic “/camera_detections”
+- Publishes camera data into ROS topic “/camera_detections”
 ### Radar node
 - Nodes for both UART and CAN connections
 - Radar data is transformed into RadarDetection type ROS-messages
@@ -57,25 +57,26 @@ All components included | Functional safety in simulation. Simulated speed adjus
         - Position
             - x, y and z in meters
         - Speed
+            - Not used in Version 0, but can be utilized later
         - Header
             - Timestamp
             - Target_ID
         - Distance
             - Calculated from the position points, based on basic trigonometry
-- Publishes radar data in the ROS topic “/radar_detections”
+- Publishes radar data into ROS topic “/radar_detections”
 ### Fusion node
 - Subscribes to topics “/camera_detections” and “/radar_detections”
 - Performs sensor fusion for camera and radar
-- Publishes the processed detections in the ROS topic “/fused_detections”
+- Publishes the processed detections into ROS topic “/fused_detections”
 ### AgOpenGPS node
 - Communication from AgOpenGPS to ROS2
 - Translates the AgOpenGPS messages to ROS messages
 - Publishes in the ROS topic “/control/agopen”
-- NOT IMPLEMENTED YET!
+- Not implemented in Version 0
 ### Tractor control node
-- Sends control signals to the tractor through CAN
 - Subscribes to the ROS topic “/control”
-- NOT IMPLEMENTED YET!
+- Sends control signals to the tractor through CAN (ISOBUS)
+    - Not implemented in Version 0
 ### Safety monitor node
 - Includes a state machine for controlling tractor speed
     - States:
@@ -91,24 +92,99 @@ All components included | Functional safety in simulation. Simulated speed adjus
             - Tractor speed is overridden to speed_override_2
             - Transition to state “moderate”, if nothing is detected in detection_active_reset_time
         - “stopped”
-            - Is entered when a detection is inside stopping_distance
+            - Is entered when a detection is inside stopping_distance or the tractor is in a unknown state
             - Tractor is stopped
             - Transition to state “slow”, if nothing detected in vehicle_stopped_reset_time
-- Subscribes to the ROS topics “/control/agopen” and “/fused_detections”
-- Publishes the control commands to the ROS topic “/control”
+- Subscribes to ROS topics “/control/agopen” and “/fused_detections”
+- Publishes control commands into ROS topic “/control”
 
 *Safety monitor state machine:*
 
 ![Safety monitor state machine](safety_monitor_state_machine.png)
 
 ### Simulation
-- Includes nodes and/or python scripts for simulating the hardware components
+- Includes nodes and for simulating the hardware components
 - Simulations:
     - Target_to_fuse
         - Creates a node publishing matching detections to /camera_detections and /radar_detections simultaneously
         - Used for testing the fusion algorithm
+    - Object_simulator
+        - Creates random coordinates simulating objects
     - Radar_simulator
-        - Scripts for simulated UART and CAN connections
-        - Publishes random radar detections on /radar_detections
+        - Simulates the SR75 4D radar sensor
+        - Retreives the object coordinates from object_simulator
+        - Creates other neccessary data for a radar detection
+        - Sends the simulated detection through socket-can
     - Camera_simulator
-        - Creates a node publishing random camera detections on /camera_detections
+        - Simulates the OAK-D Lite Camera sensor
+        - Retreives the object coordinates from object_simulator
+        - Creates other neccessary data for a camera detection
+        - Publishes the simulated detection into /oakd/detections
+
+## Testing
+
+The packages include both unit- and integration tests for verifying the safety system. The tests are included in a ci-pipeline and will be ran in every push to the branch "main". The tests are described below.
+
+**Integration test:**
+-	Launch the following nodes:
+    - Radar_node
+    - Camera_node
+    - Fusion_node
+    - Safety_monitor_node
+    - Object_simulator
+    - Radar_simulator
+    - Camera_simulator
+    - Agopen_simulator
+-	Tested features:
+    - Test if the detections pass through the whole system pipeline and finally a control command is sent based on the detection
+
+**Unit tests for independent nodes:**
+
+- test_camera_node:
+    - Test the radar data extraction from CAN
+    - Test if a RadarDetection is formed correctly and published in /radar_detections
+
+- test_radar_node:
+    - Test if the camera node can receive messages from /oakd/detections
+    - Test if the node correctly processes received detections and publishes them to /camera_detections as CameraDetections
+
+- Fusion node tests:
+    - test_fusion:
+        - Test the fusion algorithm with corresponding detections from camera and radar
+        - Test if fused detections are published correctly
+    - test_single_sensor_detection:
+        - Test the processing of individual detections from camera and radar
+        - Test if detections are published correctly
+    - test_fusion_parameters:
+        - Test that parameters can be updated
+    - test_detection_limits:
+        - Test functionality with camera detections too far and radar detections too close
+            - Should not publish
+
+- Safety_monitor tests:
+    - test_state_transitions:
+        - Agopen
+            - -> moderate, when detection inside safety_distance_1
+            - -> slow, when detection inside safety_distance_2
+            - -> stopped, when detection inside stop_distance
+        - Moderate 
+            - -> slow, when detection inside safety_distance_2
+            - -> stopped, when detection inside stop_distance
+            - -> No change, when detection is inside safety_distance_1, or outside the safety distances
+            - -> agopen, if no detections in active_detection_reset_time
+        - Slow
+            - -> stopped, when detection inside stop_distance
+            - No change, when detection inside outside of stop_distance
+            - -> moderate, if no detections in active_detection_reset_time
+        - Stopped
+            - -> slow, if no detections in vehicle_stopped_reset_time
+            - No change from detections
+        - Test with unknown state
+            - Should stop
+    - test_safety_monitor_parameters:
+        - Test that parameters can be updated
+    - test_speed_control:
+        - Agopen speed is overridden to speed_override_1, when in state moderate
+        - Agopen speed is overridden to speed_override_2, when in state slow
+        - No control commands are sent from agopen, when in state stopped
+        - A stop command is sent, when in unknown state
