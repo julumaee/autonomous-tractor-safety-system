@@ -20,6 +20,7 @@ class TractorControl(Node):
                                f'speed={control_command.speed}, '
                                f'steering_angle={control_command.steering_angle}')
 
+
 def main(args=None):
     rclpy.init(args=args)
     control_node = TractorControl()
