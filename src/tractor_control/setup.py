@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'control_node = tractor_control.control_node:main',
         ],
     },
 )
