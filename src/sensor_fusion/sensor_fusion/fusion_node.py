@@ -85,73 +85,23 @@ class FusionNode(Node):
         self.get_logger().info('Received a detection from radar: '
                                f'{radar_msg.header.frame_id}')
 
-    def attempt_fusion(self):
-        """Match radar and camera detections, and perform fusion if a match is found."""
-        # If no camera detections, process radar detections without fusion
-        if not self.camera_detections:
-            for radar_msg in list(self.radar_detections):
-                radar_time = radar_msg.header.stamp.sec
-                + float(radar_msg.header.stamp.nanosec * 1e-9)
-                if self.verify_detection(radar_msg, 'radar'):
-                    self.publish_radar_detection(radar_msg)
-                    self.radar_detections.remove(radar_msg)
-                # If radar detection is older than 1 second, remove it
-                elif radar_time < self.get_clock().now().to_msg().sec - 1:
-                    self.radar_detections.remove(radar_msg)
-        for camera_msg in list(self.camera_detections):
-            camera_time = camera_msg.header.stamp.sec
-            + float(camera_msg.header.stamp.nanosec * 1e-9)
+    def process_radar_detection_without_fusion(self, radar_detection):
+        """Process radar detections independently if no camera detections exist."""
+        current_time = self.get_clock().now().to_msg().sec
+        radar_time = self.get_detection_time(radar_detection)
+        if self.verify_detection(radar_detection, 'radar'):
+            self.publish_radar_detection(radar_detection)
+        elif radar_time < current_time - 1:  # Remove old detections
+            self.radar_detections.remove(radar_detection)
 
-            best_matches = []  # Store matching radar detections here
-
-            for radar_msg in list(self.radar_detections):
-                radar_time = radar_msg.header.stamp.sec
-                + float(radar_msg.header.stamp.nanosec * 1e-9)
-
-                # Temporal matching
-                if abs((camera_time - radar_time)) > self.time_threshold:
-                    # If detection distance is over the minimum
-                    # radar trusted distance, publish without fusion.
-                    if radar_msg.distance > self.radar_trust_min:
-                        self.publish_radar_detection(radar_msg)
-                    self.radar_detections.remove(radar_msg)
-                    continue  # No match found, continue to next detection
-
-                # Spatial matching
-                transformed_radar_point = self.transform_radar_to_camera(radar_msg.position)
-                distance = np.linalg.norm([transformed_radar_point.x
-                                           - camera_msg.position.x, transformed_radar_point.y
-                                           - camera_msg.position.y])
-                if distance < self.distance_threshold:
-                    best_matches.append((radar_msg, distance))
-                else:
-                    # If detection distance is over the minimum
-                    # radar trusted distance, publish without fusion.
-                    if self.verify_detection(radar_msg, 'radar'):
-                        self.publish_radar_detection(radar_msg)
-                        self.radar_detections.remove(radar_msg)
-                    # If radar detection is older than 1 second, remove it
-                    elif radar_time < self.get_clock().now().to_msg().sec - 1:
-                        self.radar_detections.remove(radar_msg)
-            if best_matches:
-                # If matches were found, fuse the best match
-                best_match, _ = min(best_matches, key=lambda x: x[1])
-                fused_detection = self.create_fused_detection(camera_msg, best_match)
-                self.publisher_.publish(fused_detection)
-                self.get_logger().info('Publishing fused detection with id: '
-                                       f'{fused_detection.header.frame_id}')
-
-                # Remove radar and camera detections from deques
-                for radar_msg, _ in best_matches:
-                    if radar_msg in self.radar_detections:
-                        self.radar_detections.remove(radar_msg)
-                self.camera_detections.remove(camera_msg)
-            else:
-                # If no match found and camera detection is trusted, publish it
-                if self.verify_detection(camera_msg, 'camera'):
-                    self.publish_camera_detection(camera_msg)
-                # Remove camera detection from deque
-                self.camera_detections.remove(camera_msg)
+    def process_camera_detection_without_fusion(self, camera_detection):
+        """Process camera detections independently if no radar detections exist."""
+        current_time = self.get_clock().now().to_msg().sec
+        camera_time = self.get_detection_time(camera_detection)
+        if self.verify_detection(camera_detection, 'camera'):
+            self.publish_camera_detection(camera_detection)
+        elif camera_time < current_time - 1:  # Remove old detections
+            self.camera_detections.remove(camera_detection)
 
     def transform_radar_to_camera(self, radar_point):
         """Transform radar coordinates to camera coordinates."""
@@ -168,7 +118,7 @@ class FusionNode(Node):
                      z=camera_coordinates[2])
 
     def verify_detection(self, detection, detection_type):
-        """Verify if a detection is valid."""
+        """Verify detection validity."""
         if detection_type == 'camera':
             distance = np.linalg.norm([detection.position.x,
                                        detection.position.y,
@@ -181,45 +131,119 @@ class FusionNode(Node):
                 return True
         return False
 
-    def publish_radar_detection(self, radar_msg):
-        modified_radar_msg = FusedDetection()
-        modified_radar_msg.header = radar_msg.header
-        modified_radar_msg.distance = radar_msg.distance
-        modified_radar_msg.speed = radar_msg.speed
-        modified_radar_msg.position = self.transform_radar_to_camera(radar_msg.position)
-        modified_radar_msg.detection_type = 'radar'
-        self.publisher_.publish(modified_radar_msg)
+    def get_detection_time(self, detection):
+        """Extract the detection timestamp from a ROS message."""
+        return detection.header.stamp.sec + float(detection.header.stamp.nanosec * 1e-9)
+
+    def temporal_match(self, camera_detection, radar_detection):
+        """Return the distance of objects if a match is found, -1 if not."""
+        camera_time = self.get_detection_time(camera_detection)
+        radar_time = self.get_detection_time(radar_detection)
+        if abs((camera_time - radar_time)) < self.time_threshold:  # Match!
+            return True
+        return False  # No match found
+
+    def spatial_match(self, camera_detection, radar_detection):
+        """Perform spatial matching. Return True if a match is found, False if not."""
+        transformed_radar_point = self.transform_radar_to_camera(radar_detection.position)
+        distance = np.linalg.norm([transformed_radar_point.x
+                                   - camera_detection.position.x, transformed_radar_point.y
+                                   - camera_detection.position.y])
+        if distance < self.distance_threshold:  # Match!
+            return True
+        return False  # No match found
+
+    def attempt_fusion(self):
+        """Match radar and camera detections, and perform fusion if a match is found."""
+        # If no camera detections, process radar detections without fusion
+        if not self.camera_detections:
+            for radar_detection in list(self.radar_detections):
+                self.process_radar_detection_without_fusion(radar_detection)
+
+        elif not self.radar_detections:
+            for camera_detection in list(self.camera_detections):
+                self.process_camera_detection_without_fusion(camera_detection)
+
+        else:
+            for camera_detection in list(self.camera_detections):
+                matches = []  # Store matching radar detections here
+
+                for radar_detection in list(self.radar_detections):
+
+                    # Temporal matching
+                    if not self.temporal_match(camera_detection, radar_detection):
+                        continue  # No match found, continue to next detection
+
+                    # Spatial matching
+                    distance = self.spatial_match(camera_detection, radar_detection)
+                    if distance != -1:
+                        matches.append((radar_detection, distance))
+
+                if matches:
+                    # Find best match from matches
+                    best_match, _ = min(matches, key=lambda x: x[1])
+                    # Fuse the detections and publish
+                    self.publish_fused_detection(camera_detection, best_match)
+
+                    # Remove radar and camera detections from deques
+                    for radar_detection, _ in matches:
+                        if radar_detection in self.radar_detections:
+                            self.radar_detections.remove(radar_detection)
+                    self.camera_detections.remove(camera_detection)
+
+            # Process the remaining detections individually:
+
+            for camera_detection in list(self.camera_detections):
+                self.process_camera_detection_without_fusion(camera_detection)
+
+            for radar_detection in list(self.radar_detections):
+                self.process_radar_detection_without_fusion(radar_detection)
+
+    def publish_radar_detection(self, radar_detection):
+        modified_radar_detection = FusedDetection()
+        modified_radar_detection.header = radar_detection.header
+        modified_radar_detection.distance = radar_detection.distance
+        modified_radar_detection.speed = radar_detection.speed
+        modified_radar_detection.position = self.transform_radar_to_camera(
+            radar_detection.position
+        )
+        modified_radar_detection.detection_type = 'radar'
+        self.publisher_.publish(modified_radar_detection)
+        self.radar_detections.remove(radar_detection)
         self.get_logger().info('Publishing radar detection at distance: '
-                               f'{modified_radar_msg.distance}')
+                               f'{modified_radar_detection.distance}')
 
-    def publish_camera_detection(self, camera_msg):
-        modified_camera_msg = FusedDetection()
-        modified_camera_msg.bbox = camera_msg.bbox
-        modified_camera_msg.position = camera_msg.position
-        distance = np.linalg.norm([camera_msg.position.x,
-                                   camera_msg.position.y,
-                                   camera_msg.position.z])
-        modified_camera_msg.distance = int(distance)
-        modified_camera_msg.is_tracking = camera_msg.is_tracking
-        modified_camera_msg.tracking_id = camera_msg.tracking_id
-        modified_camera_msg.detection_type = 'camera'
-        self.publisher_.publish(modified_camera_msg)
+    def publish_camera_detection(self, camera_detection):
+        modified_camera_detection = FusedDetection()
+        modified_camera_detection.bbox = camera_detection.bbox
+        modified_camera_detection.position = camera_detection.position
+        distance = np.linalg.norm([camera_detection.position.x,
+                                   camera_detection.position.y,
+                                   camera_detection.position.z])
+        modified_camera_detection.distance = int(distance)
+        modified_camera_detection.is_tracking = camera_detection.is_tracking
+        modified_camera_detection.tracking_id = camera_detection.tracking_id
+        modified_camera_detection.detection_type = 'camera'
+        self.publisher_.publish(modified_camera_detection)
+        self.camera_detections.remove(camera_detection)
         self.get_logger().info('Publishing camera detection at distance: '
-                               f'{modified_camera_msg.distance}')
+                               f'{modified_camera_detection.distance}')
 
-    def create_fused_detection(self, camera_msg, radar_msg):
+    def publish_fused_detection(self, camera_detection, radar_detection):
         """Create a FusedDetection message from camera and radar detections."""
         fused_detection = FusedDetection()
-        fused_detection.header = camera_msg.header
-        fused_detection.results = camera_msg.results
-        fused_detection.bbox = camera_msg.bbox
-        fused_detection.position = radar_msg.position
-        fused_detection.is_tracking = camera_msg.is_tracking
-        fused_detection.tracking_id = camera_msg.tracking_id
-        fused_detection.distance = radar_msg.distance
-        fused_detection.speed = radar_msg.speed
+        fused_detection.header = camera_detection.header
+        fused_detection.results = camera_detection.results
+        fused_detection.bbox = camera_detection.bbox
+        fused_detection.position = radar_detection.position
+        fused_detection.is_tracking = camera_detection.is_tracking
+        fused_detection.tracking_id = camera_detection.tracking_id
+        fused_detection.distance = radar_detection.distance
+        fused_detection.speed = radar_detection.speed
         fused_detection.detection_type = 'fused'
-        return fused_detection
+        self.publisher_.publish(fused_detection)
+        self.get_logger().info('Publishing fused detection with id: '
+                               f'{fused_detection.header.frame_id}')
 
 
 def main(args=None):
