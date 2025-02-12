@@ -11,7 +11,8 @@ class CameraNode(Node):
         self.publisher_ = self.create_publisher(CameraDetection, '/camera_detections', 10)
         self.subscription = self.create_subscription(
             SpatialDetectionArray,
-            '/oakd/detections',
+            # The topic name should match the one in the launch file
+            '/color/yolov4_Spatial_detections',
             self.publish_detections,
             10)
         self.subscription  # prevent unused variable warning

@@ -16,6 +16,11 @@ Simulation and testing | Simple tests to the safety system without integrating t
 All components included | Provides simulated functional safety with speed adjustment. | Provides functional safety with real tractor speed adjustment through ISOBUS. | Machine vision system assists in the control and path planning process providing details of the surroundings, such as obstacles in the real world. The path of the vehicle will be adjusted according to this updated map. Full tractor control through ISOBUS.
 
 
+**Note** The safety system uses Nanoradar SR75 4D-radar and OAK-D 2 camera sensors for perception, which are interfaced through the camera_node and radar_node. These sensors can be replaced, but the interfacing nodes must be modified or replaced too. To use the OAK-D 2 camera, depthai-ros driver is used (https://github.com/luxonis/depthai-ros/tree/humble). The camera interface is configured to match running the camera with yoloV4_publisher.launch.py. Camera launch command:
+```console
+ros2 launch depthai_examples yolov4_publisher.launch.py camera_model:=OAK-D spatial_camera:=true
+```
+
 ## System architecture:g
 
 ![System architecture](system_architecture.png)
