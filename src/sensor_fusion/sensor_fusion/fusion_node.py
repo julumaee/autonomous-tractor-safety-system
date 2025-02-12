@@ -31,10 +31,11 @@ class FusionNode(Node):
         self.radar_detections = deque(maxlen=20)   # Limit to 20 recent detections
 
         # Declare parameters with default values
-        self.declare_parameter('time_threshold', 0.5)      # Default value 0.5 seconds
-        self.declare_parameter('distance_threshold', 1.0)  # Default value 1 meter
-        self.declare_parameter('radar_trust_min', 4)       # Default value 4 meters
-        self.declare_parameter('camera_trust_max', 12)     # Default value 12 meters
+        self.declare_parameter('time_threshold', 0.5)         # Default value 0.5 seconds
+        self.declare_parameter('distance_threshold', 1.0)     # Default value 1 meter
+        self.declare_parameter('radar_trust_min', 4)          # Default value 4 meters
+        self.declare_parameter('camera_trust_max', 12)        # Default value 12 meters
+        self.declare_parameter('detection_score_trust', 0.5)  # Default value 0.5
         self.declare_parameter('rotation_matrix', [1.0, 0.0, 0.0,
                                                    0.0, 1.0, 0.0,
                                                    0.0, 0.0, 1.0])
@@ -45,6 +46,7 @@ class FusionNode(Node):
         self.distance_threshold = self.get_parameter('distance_threshold').value
         self.radar_trust_min = self.get_parameter('radar_trust_min').value
         self.camera_trust_max = self.get_parameter('camera_trust_max').value
+        self.detection_score_trust = self.get_parameter('detection_score_trust').value
         rotation_matrix_param = self.get_parameter('rotation_matrix').value
         translation_vector_param = self.get_parameter('translation_vector').value
         self.R = np.array(rotation_matrix_param).reshape(3, 3)
@@ -64,6 +66,8 @@ class FusionNode(Node):
                 self.camera_trust_max = param.value
             elif param.name == 'radar_trust_min':
                 self.radar_trust_min = param.value
+            elif param.name == 'detection_score_trust':
+                self.detection_score_trust = param.value
             elif param.name == 'rotation_matrix':
                 rotation_matrix_param = param.value
                 self.R = np.array(rotation_matrix_param).reshape(3, 3)
@@ -83,12 +87,17 @@ class FusionNode(Node):
 
     def attempt_fusion(self):
         """Match radar and camera detections, and perform fusion if a match is found."""
-        # If no camera detections, publish radar detections without fusion
+        # If no camera detections, process radar detections without fusion
         if not self.camera_detections:
             for radar_msg in list(self.radar_detections):
-                if radar_msg.distance > self.radar_trust_min:
+                radar_time = radar_msg.header.stamp.sec
+                + float(radar_msg.header.stamp.nanosec * 1e-9)
+                if self.verify_detection(radar_msg, 'radar'):
                     self.publish_radar_detection(radar_msg)
-                self.radar_detections.remove(radar_msg)
+                    self.radar_detections.remove(radar_msg)
+                # If radar detection is older than 1 second, remove it
+                elif radar_time < self.get_clock().now().to_msg().sec - 1:
+                    self.radar_detections.remove(radar_msg)
         for camera_msg in list(self.camera_detections):
             camera_time = camera_msg.header.stamp.sec
             + float(camera_msg.header.stamp.nanosec * 1e-9)
@@ -118,9 +127,12 @@ class FusionNode(Node):
                 else:
                     # If detection distance is over the minimum
                     # radar trusted distance, publish without fusion.
-                    if radar_msg.distance > self.radar_trust_min:
+                    if self.verify_detection(radar_msg, 'radar'):
                         self.publish_radar_detection(radar_msg)
-                    self.radar_detections.remove(radar_msg)
+                        self.radar_detections.remove(radar_msg)
+                    # If radar detection is older than 1 second, remove it
+                    elif radar_time < self.get_clock().now().to_msg().sec - 1:
+                        self.radar_detections.remove(radar_msg)
             if best_matches:
                 # If matches were found, fuse the best match
                 best_match, _ = min(best_matches, key=lambda x: x[1])
@@ -135,12 +147,9 @@ class FusionNode(Node):
                         self.radar_detections.remove(radar_msg)
                 self.camera_detections.remove(camera_msg)
             else:
-                # Publish camera detection if it is inside the trusted distance
-                camera_detection_distance = np.linalg.norm(
-                    [camera_msg.position.x, camera_msg.position.y, camera_msg.position.z])
-                if camera_detection_distance < self.camera_trust_max:
-                    self.publish_camera_detection(camera_msg, camera_detection_distance)
-
+                # If no match found and camera detection is trusted, publish it
+                if self.verify_detection(camera_msg, 'camera'):
+                    self.publish_camera_detection(camera_msg)
                 # Remove camera detection from deque
                 self.camera_detections.remove(camera_msg)
 
@@ -158,6 +167,20 @@ class FusionNode(Node):
                      y=camera_coordinates[1],
                      z=camera_coordinates[2])
 
+    def verify_detection(self, detection, detection_type):
+        """Verify if a detection is valid."""
+        if detection_type == 'camera':
+            distance = np.linalg.norm([detection.position.x,
+                                       detection.position.y,
+                                       detection.position.z])
+            if distance < self.camera_trust_max:
+                if detection.results[0].score > self.detection_score_trust:
+                    return True
+        elif detection_type == 'radar':
+            if detection.distance > self.radar_trust_min:
+                return True
+        return False
+
     def publish_radar_detection(self, radar_msg):
         modified_radar_msg = FusedDetection()
         modified_radar_msg.header = radar_msg.header
@@ -169,11 +192,14 @@ class FusionNode(Node):
         self.get_logger().info('Publishing radar detection at distance: '
                                f'{modified_radar_msg.distance}')
 
-    def publish_camera_detection(self, camera_msg, camera_detection_distance):
+    def publish_camera_detection(self, camera_msg):
         modified_camera_msg = FusedDetection()
         modified_camera_msg.bbox = camera_msg.bbox
         modified_camera_msg.position = camera_msg.position
-        modified_camera_msg.distance = int(camera_detection_distance)
+        distance = np.linalg.norm([camera_msg.position.x,
+                                   camera_msg.position.y,
+                                   camera_msg.position.z])
+        modified_camera_msg.distance = int(distance)
         modified_camera_msg.is_tracking = camera_msg.is_tracking
         modified_camera_msg.tracking_id = camera_msg.tracking_id
         modified_camera_msg.detection_type = 'camera'

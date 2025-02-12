@@ -17,14 +17,16 @@ class CameraNode(Node):
             10)
         self.subscription  # prevent unused variable warning
 
-    def convert_message(self, oakd_msg):
+    def convert_message(self, detection):
         """Convert messages from Luxonis OAKD-lite 2 to CameraMessage format."""
         camera_detectin_msg = CameraDetection()
-        camera_detectin_msg.results = oakd_msg.results
-        camera_detectin_msg.bbox = oakd_msg.bbox
-        camera_detectin_msg.position = oakd_msg.position
-        camera_detectin_msg.is_tracking = oakd_msg.is_tracking
-        camera_detectin_msg.tracking_id = oakd_msg.tracking_id
+        camera_detectin_msg.results = []
+        for result in detection.results:
+            camera_detectin_msg.results.append(result)
+        camera_detectin_msg.bbox = detection.bbox
+        camera_detectin_msg.position = detection.position
+        camera_detectin_msg.is_tracking = detection.is_tracking
+        camera_detectin_msg.tracking_id = detection.tracking_id
         return camera_detectin_msg
 
     def publish_detections(self, oakd_msg):

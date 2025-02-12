@@ -6,6 +6,7 @@ import rclpy
 from sensor_fusion.fusion_node import FusionNode
 from std_msgs.msg import Header
 from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
+from vision_msgs.msg import ObjectHypothesis
 
 
 class TestSingleSensorDetection(unittest.TestCase):
@@ -33,7 +34,7 @@ class TestSingleSensorDetection(unittest.TestCase):
 
         self.fusion_node.publisher_.publish = mock_publisher
 
-    def create_camera_detection(self, x, y, z, tracking_id='test_camera'):
+    def create_camera_detection(self, x, y, z, hypothesis, tracking_id='test_camera'):
         """Create a CameraDetection message."""
         msg = CameraDetection()
         msg.header = Header()
@@ -41,6 +42,8 @@ class TestSingleSensorDetection(unittest.TestCase):
         msg.header.stamp.nanosec = 0
         msg.position = Point(x=x, y=y, z=z)
         msg.tracking_id = tracking_id
+        msg.results = []
+        msg.results.append(hypothesis)
         return msg
 
     def create_radar_detection(self, x, y, z, speed, frame_id='test_radar'):
@@ -58,26 +61,55 @@ class TestSingleSensorDetection(unittest.TestCase):
     def test_single_detection_handling(self):
         """Ensure correct handling of individual radar and camera detections."""
         # Create a camera detection passing the trust threshold
-        camera_msg = self.create_camera_detection(3.0, 3.0, 0.0)
+        hypothesis1 = ObjectHypothesis(class_id='person', score=0.95)
+        camera_msg_trusted = self.create_camera_detection(3.0, 3.0, 0.0, hypothesis1)
         # Create a radar detection passing the trust threshold
-        radar_msg = self.create_radar_detection(10.0, 20.0, 0.0, speed=2)
+        radar_msg_trusted = self.create_radar_detection(10.0, 20.0, 0.0, speed=2)
+
+        # Create a camera detection not passing the trust threshold
+        hypothesis2 = ObjectHypothesis(class_id='person', score=0.4)
+        camera_msg_untrusted = self.create_camera_detection(3.0, 3.0, 0.0, hypothesis2)
+
+        # Create a radar detection not passing the trust threshold
+        radar_msg_untrusted = self.create_radar_detection(1.0, 0.0, 0.0, speed=2)
 
         # Override parameters for testing
         self.fusion_node.time_threshold = 0.5
         self.fusion_node.distance_threshold = 1.0
         self.fusion_node.radar_trust_min = 4.0
         self.fusion_node.camera_trust_max = 12.0
+        self.fusion_node.detection_score_trust = 0.6
         self.fusion_node.R = np.eye(3)  # Identity matrix (no rotation)
         self.fusion_node.T = np.zeros(3)  # No translation
 
+        # Test with untrusted detections:
+
         # Add radar detection to the fusion node
-        self.fusion_node.radar_detections.append(radar_msg)
+        self.fusion_node.radar_detections.append(radar_msg_untrusted)
 
         # Attempt fusion
         self.fusion_node.attempt_fusion()
 
         # Add camera detection to the fusion node
-        self.fusion_node.camera_detections.append(camera_msg)
+        self.fusion_node.camera_detections.append(camera_msg_untrusted)
+
+        # Attempt fusion
+        self.fusion_node.attempt_fusion()
+
+        # Check if no detections have been published
+        self.assertEqual(len(self.published_detections), 0,
+                         msg='No detections should have been published.')
+
+        # Test with trusted detections:
+
+        # Add radar detection to the fusion node
+        self.fusion_node.radar_detections.append(radar_msg_trusted)
+
+        # Attempt fusion
+        self.fusion_node.attempt_fusion()
+
+        # Add camera detection to the fusion node
+        self.fusion_node.camera_detections.append(camera_msg_trusted)
 
         # Attempt fusion
         self.fusion_node.attempt_fusion()
@@ -91,22 +123,32 @@ class TestSingleSensorDetection(unittest.TestCase):
 
         self.assertEqual(radar_detection.detection_type, 'radar',
                          msg='Sent radar detection should be of type radar')
-        self.assertAlmostEqual(radar_detection.position.x, radar_msg.position.x, places=2,
+        self.assertAlmostEqual(radar_detection.position.x,
+                               radar_msg_trusted.position.x,
+                               places=2,
                                msg='Fused position X should match radar')
-        self.assertAlmostEqual(radar_detection.position.y, radar_msg.position.y, places=2,
+        self.assertAlmostEqual(radar_detection.position.y,
+                               radar_msg_trusted.position.y,
+                               places=2,
                                msg='Fused position Y should match radar')
-        self.assertEqual(radar_detection.distance, radar_msg.distance,
+        self.assertEqual(radar_detection.distance,
+                         radar_msg_trusted.distance,
                          msg='Fused distance should match radar')
-        self.assertEqual(radar_detection.speed, radar_msg.speed,
+        self.assertEqual(radar_detection.speed,
+                         radar_msg_trusted.speed,
                          msg='Fused speed should match radar')
 
         camera_detection = self.published_detections[1]
 
         self.assertEqual(camera_detection.detection_type, 'camera',
-                         msg='Sent radar detection should be of type camera')
-        self.assertAlmostEqual(camera_detection.position.x, camera_msg.position.x, places=2,
+                         msg='Sent camera detection should be of type camera')
+        self.assertAlmostEqual(camera_detection.position.x,
+                               camera_msg_trusted.position.x,
+                               places=2,
                                msg='Position X should match camera')
-        self.assertAlmostEqual(camera_detection.position.y, camera_msg.position.y, places=2,
+        self.assertAlmostEqual(camera_detection.position.y,
+                               camera_msg_trusted.position.y,
+                               places=2,
                                msg='Position Y should match camera')
 
 
