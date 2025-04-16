@@ -78,12 +78,9 @@ class FusionNode(Node):
 
     def listen_to_camera(self, camera_msg):
         self.camera_detections.append(camera_msg)
-        self.get_logger().info(f'Received a detection from camera: {camera_msg.header.frame_id}')
 
     def listen_to_radar(self, radar_msg):
         self.radar_detections.append(radar_msg)
-        self.get_logger().info('Received a detection from radar: '
-                               f'{radar_msg.header.frame_id}')
 
     def process_radar_detection_without_fusion(self, radar_detection):
         """Process radar detections independently if no camera detections exist."""

@@ -20,8 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'radar_node_UART = radar_interface.radar_node_UART:main',
-            'radar_node_can = radar_interface.radar_node_can:main',
+            'radar_node = radar_interface.radar_node:main',
         ],
     },
 )
