@@ -21,7 +21,7 @@ All components included | Provides simulated functional safety with speed adjust
 ros2 launch depthai_examples yolov4_publisher.launch.py camera_model:=OAK-D spatial_camera:=true
 ```
 
-## System architecture:g
+## System architecture:
 
 ![System architecture](system_architecture.png)
 
