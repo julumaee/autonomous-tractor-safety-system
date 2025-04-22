@@ -21,7 +21,6 @@ setup(
     entry_points={
         'console_scripts': [
             'camera_simulator = simulations.camera_simulator:main',
-            'radar_simulator_UART = simulations.radar_simulator_UART:main',
             'radar_simulator_can = simulations.radar_simulator_can:main',
             'agopen_simulator = simulations.agopen_simulator:main',
             'target_to_fuse_simulator = simulations.target_to_fuse_simulator:main',

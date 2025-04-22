@@ -28,7 +28,7 @@ def generate_test_description():
     radar_simulator_can = Node(
         package='simulations',
         executable='radar_simulator_can',
-        name='radar_simulator',
+        name='radar_simulator_can',
         output='screen'
         )
     camera_simulator = Node(
@@ -51,7 +51,7 @@ def generate_test_description():
         )
     radar_node_can = Node(
         package='radar_interface',
-        executable='radar_node_can',
+        executable='radar_node',
         name='radar_node',
         output='screen'
         )

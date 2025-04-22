@@ -52,7 +52,8 @@ def generate_launch_description():
         Node(
             package='radar_interface',
             executable='radar_node',
-            name='radar_node_can',
+            name='radar_node',
+            parameters=['parameters.yaml'],
             output='screen'
         ),
 
