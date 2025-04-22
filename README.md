@@ -9,10 +9,10 @@ Component       | Version 0     | Version 1     | Version 2     |
 Camera Node     | Full functionality | Full functionality | Full functionality
 Radar Node      | Full functionality | Full functionality | Full functionality
 Fusion Node     | Perform simple fusion based on detection timestamp and positions. Publish detections from single sensors if not associated with any other sensor detection, and the detection is inside trusted detection limits. | Tracking of the targets added, publish detections from single sensors only if the target is tracked for more than one frame. Simple target recognition using the camera machine vision system. | Utilize filtering to identify false detections more accurately (for example Kalman filtering). Improved object recognition algorithm using radar point-cloud data to verify detections.
-Safety Monitor  | Adjust the tractor speed, if obstacles are detected in the vision systems sight. | Adjust tractor speed when obstacles are detected in a determined distance from the tractors path, taking into account the tractor steering angle. | Adjust tractor path if needed according to detected objects.
-Tractor Control | Receives ControlCommands, but doesn't forward them | Able to control tractor speed through ISOBUS, but steering angle comes straight from AgOpenGPS. | Able to fully control the tractor based on AgOpenGPS and the safety system through ISOBUS.
+Safety Monitor  | Adjust the tractor speed state, if obstacles are detected in the vision systems sight. | Adjust tractor speed when obstacles are detected in a determined distance from the tractors path, considering also the tractor steering angle and path. | Adjust tractor path if needed according to detected objects.
+Tractor Control | Receives ControlCommands, but doesn't forward them. | Able to control tractor speed through ISOBUS, but steering angle comes straight from AgOpenGPS. | Able to fully control the tractor based on AgOpenGPS and the safety system through ISOBUS.
 AgOpenGPS Node  | Only simulated | Translates AgOpenGPS commands to ROS2 messages, and forwads them to the safety monitor node. | Communicates with AgOpenGPS, being able to adjust the map and assist in the path planning process.
-Simulation and testing | Simple tests to the safety system without integrating to the tractor | Tested in real working environments,integrated into the tractor. | Tested in real working environments, integrated into the tractor.
+Simulation and testing | Simple tests to the safety system without integrating to the tractor | Tested in real working environments, integrated into the tractor. | Tested in real working environments, integrated into the tractor.
 All components included | Provides simulated functional safety with speed adjustment. | Provides functional safety with real tractor speed adjustment through ISOBUS. | Machine vision system assists in the control and path planning process providing details of the surroundings, such as obstacles in the real world. The path of the vehicle will be adjusted according to this updated map. Full tractor control through ISOBUS.
 
 
@@ -20,6 +20,8 @@ All components included | Provides simulated functional safety with speed adjust
 ```console
 ros2 launch depthai_examples yolov4_publisher.launch.py camera_model:=OAK-D spatial_camera:=true
 ```
+
+The radar interface is configured to match 
 
 ## System architecture:
 
@@ -52,11 +54,11 @@ ros2 launch depthai_examples yolov4_publisher.launch.py camera_model:=OAK-D spat
             - A bounding box surrounding the object.
             - Of type BoundingBox2D
             - Not used in Version 0, but can be utilized later
-- Subscribes to topic “/oakd/detections”
+- Subscribes to topic “/color/yolov4_Spatial_detections”
     - This is the topic where oak-d s2 will publish its detections
 - Publishes camera data into ROS topic “/camera_detections”
 ### Radar node
-- Nodes for both UART and CAN connections
+- Receives radar detections through CAN, utilizing SocketCAN
 - Radar data is transformed into RadarDetection type ROS-messages
     - Messages include:
         - Position
