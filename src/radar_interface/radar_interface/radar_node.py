@@ -36,7 +36,7 @@ class RadarNode(Node):
         return SetParametersResult(successful=True)
 
     def listen_to_can(self):
-        """ Read and publish CAN messages in a loop."""
+        """Read and publish CAN messages in a loop."""
         while rclpy.ok():
             frame = self.bus.recv(timeout=0.1)  # Waits for a message for 0.1 seconds
             if frame:
