@@ -75,6 +75,7 @@ class SafetyMonitor(Node):
         return SetParametersResult(successful=True)
 
     def control_speed_state(self, detection):
+        """Control the tractor speed state based on detection distances."""
         distance = detection.distance
         self.get_logger().info('Received detection: '
                                f'{detection.header.frame_id} at distance: {distance}m')
@@ -100,6 +101,7 @@ class SafetyMonitor(Node):
                 self.vehicle_state = 'moderate'
 
     def send_stop_command(self):
+        """Send a stop command."""
         stop_cmd = ControlCommand()
         stop_cmd.speed = 0
         stop_cmd.steering_angle = self.latest_steering_angle
@@ -107,7 +109,7 @@ class SafetyMonitor(Node):
         self.publisher_.publish(stop_cmd)
 
     def state_control(self):
-        # Reset active_detection if nothing detected for more than 5 seconds
+        """Update speed state if nothing detected during reset time."""
         current_time = self.get_clock().now()
         time_diff_1 = (current_time - self.last_detection_time_1).nanoseconds / 1e9
         time_diff_2 = (current_time - self.last_detection_time_2).nanoseconds / 1e9
@@ -132,6 +134,7 @@ class SafetyMonitor(Node):
             self.get_logger().info('Vehicle in unknown state. Stopping the vehicle.')
 
     def agopen_control(self, agopen_cmd):
+        """Override agopen control commands based on the speed state."""
         if self.vehicle_state == 'agopen':
             # Forward AgOpenGPS commands if no active detections
             self.get_logger().info('No active detections, forwarding AgOpenGPS control commands.')

@@ -2,7 +2,7 @@
 #                                                                                            #
 # This module contains a set of unit tests for the SafetyMonitor class, which is part of the #
 # tractor safety system. The tests are designed to ensure that the SafetyMonitor correctly   #
-# processes and overrides control commands based on the current state.                      #
+# processes and overrides control commands based on the current state.                       #
 #                                                                                            #
 # Classes:                                                                                   #
 #    TestFusionNode: A unittest.TestCase subclass that contains tests for the SafetyMonitor  #

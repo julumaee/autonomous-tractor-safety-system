@@ -1,3 +1,26 @@
+##############################################################################################
+#                                                                                            #
+# This module contains a set of unit tests for the FusionNode class, which is part of the    #
+# tractor safety system. The tests are designed to ensure that the FusionNode correctly      #
+# processes detections from single sensors, when trusted data isn't available from both.     #
+#                                                                                            #
+# Classes:                                                                                   #
+#    TestSingleSensorDetection: A unittest.TestCase subclass that contains tests for the     #
+#    FusionNode class.                                                                       #
+#                                                                                            #
+# Methods:                                                                                   #
+#    setUpClass(cls): Initializes ROS2 before any test is run.                               #
+#    tearDownClass(cls): Shuts down ROS2 after all tests are completed.                      #
+#    setUp(self): Initializes a FusionNode instance with a mocked publisher.                 #
+#    create_camera_detection(self, x, y, z, hypothesis, tracking_id): Creates a              #
+#    CameraDetection message.                                                                #
+#    create_radar_detection(self, x, y, z, speed, frame_id): Creates a RadarDetection        #
+#    message.                                                                                #
+#    test_single_detection_handling(self): Ensures correct handling of individual radar      #
+#    and camera detections, including trust thresholds and fusion logic.                     #
+#                                                                                            #
+##############################################################################################
+
 import unittest
 
 from geometry_msgs.msg import Point

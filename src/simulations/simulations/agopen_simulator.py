@@ -13,6 +13,7 @@ class AgOpenSimulator(Node):
         self.timer = self.create_timer(1, self.simulate_control)
 
     def simulate_control(self):
+        """Simulate agopen control commands."""
         command = ControlCommand()
         command.speed = random.randint(10, 15)
         command.steering_angle = random.randint(0, 50)

@@ -1,3 +1,22 @@
+##############################################################################################
+#                                                                                            #
+# This module contains a set of unit tests for the SafetyMonitor class, which is part of the #
+# tractor safety system. The tests are designed to ensure that the SafetyMonitor correctly   #
+# updates its parameters and maintains expected behavior.                                    #
+#                                                                                            #
+# Classes:                                                                                   #
+#    TestSafetyMonitorParameters: A unittest.TestCase subclass that contains tests for the   #
+#    parameter update functionality of the SafetyMonitor class.                              #
+#                                                                                            #
+# Methods:                                                                                   #
+#    setUpClass(cls): Initializes ROS2 before any test is run.                               #
+#    tearDownClass(cls): Shuts down ROS2 after all tests are completed.                      #
+#    setUp(self): Initializes a SafetyMonitor instance for testing.                          #
+#    test_parameter_update(self): Ensures that parameters can be updated correctly and       #
+#    verifies the updated values.                                                            #
+#                                                                                            #
+##############################################################################################
+
 import unittest
 
 import rclpy

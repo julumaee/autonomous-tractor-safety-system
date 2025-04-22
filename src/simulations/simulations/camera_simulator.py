@@ -22,7 +22,7 @@ class CameraSimulator(Node):
             10)
 
     def simulate_detection(self, simulated_object):
-        """Simulate detections and publish them as SpatialDetectionArray message."""
+        """Simulate detections and publish them as a SpatialDetectionArray message."""
         # Create a simulated SpatialDetectionArray message with 2 detections
         distance = (simulated_object.position.x ** 2 + simulated_object.position.y ** 2) ** 0.5
         if distance > 15:

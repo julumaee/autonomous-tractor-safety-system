@@ -36,13 +36,14 @@ class RadarNode(Node):
         return SetParametersResult(successful=True)
 
     def listen_to_can(self):
-        # Read and publish CAN messages in a loop
+        """ Read and publish CAN messages in a loop."""
         while rclpy.ok():
             frame = self.bus.recv(timeout=0.1)  # Waits for a message for 0.1 seconds
             if frame:
                 self.process_radar_data(frame)
 
     def process_radar_data(self, frame):
+        """Process CAN frame and add to buffer."""
         message_id = frame.arbitration_id
         data = frame.data
 
@@ -62,6 +63,7 @@ class RadarNode(Node):
                 self.publish_radar_detection(target_id)
 
     def publish_radar_detection(self, target_id):
+        """Combine the two CAN frames into a radar detection anf publish."""
         try:
             frame0 = self.frame_buffer[target_id]['frame0']
             frame1 = self.frame_buffer[target_id]['frame1']

@@ -60,6 +60,7 @@ class TestRadarNode(unittest.TestCase):
 
     @staticmethod
     def format_frame0(cluster_id, dist_long, dist_lat, vrel_long):
+        """Format frame 0 of radar detection message."""
         dist_long_scaled = int((dist_long + 100) / 0.05) & 0x1FFF
         dist_lat_scaled = int((dist_lat + 50) / 0.05) & 0x07FF
         vrel_long_scaled = int((vrel_long + 128) / 0.25) & 0x03FF
@@ -89,6 +90,7 @@ class TestRadarNode(unittest.TestCase):
 
     @staticmethod
     def format_frame1(cluster_id, height):
+        """Format frame 1 of radar detection message."""
         height_scaled = int((height + 30) / 0.1) & 0x03FF  # height range [-30, 70]
 
         frame = bytearray(8)

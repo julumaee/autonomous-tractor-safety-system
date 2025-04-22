@@ -197,6 +197,7 @@ class FusionNode(Node):
                 self.process_radar_detection_without_fusion(radar_detection)
 
     def publish_radar_detection(self, radar_detection):
+        """Publish radar detection as a single sensor detection."""
         modified_radar_detection = FusedDetection()
         modified_radar_detection.header = radar_detection.header
         modified_radar_detection.distance = radar_detection.distance
@@ -211,6 +212,7 @@ class FusionNode(Node):
                                f'{modified_radar_detection.distance}')
 
     def publish_camera_detection(self, camera_detection):
+        """Publish camera detection as a single sensor detection."""
         modified_camera_detection = FusedDetection()
         modified_camera_detection.bbox = camera_detection.bbox
         modified_camera_detection.position = camera_detection.position

@@ -1,3 +1,22 @@
+##############################################################################################
+#                                                                                            #
+# This module contains a set of unit tests for the FusionNode class, which is part of the    #
+# tractor safety system. The tests are designed to ensure that the FusionNode correctly      #
+# handles parameter updates and maintains consistency in its internal state.                 #
+#                                                                                            #
+# Classes:                                                                                   #
+#    TestFusionParameters: A unittest.TestCase subclass that contains tests for the          #
+#    parameter handling of the FusionNode class.                                             #
+#                                                                                            #
+# Methods:                                                                                   #
+#    setUpClass(cls): Initializes ROS2 before any test is run.                               #
+#    tearDownClass(cls): Shuts down ROS2 after all tests are completed.                      #
+#    setUp(self): Initializes a FusionNode instance for testing.                             #
+#    test_parameter_update(self): Ensures that parameters can be updated correctly and       #
+#    verifies the internal state of the FusionNode.                                          #
+#                                                                                            #
+##############################################################################################
+
 import unittest
 
 import numpy as np

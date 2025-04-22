@@ -18,7 +18,7 @@ class CameraNode(Node):
         self.subscription  # prevent unused variable warning
 
     def convert_message(self, detection):
-        """Convert messages from Luxonis OAKD-lite 2 to CameraMessage format."""
+        """Convert messages from SpatialDetection to CameraMessage format."""
         camera_detectin_msg = CameraDetection()
         camera_detectin_msg.results = []
         for result in detection.results:
