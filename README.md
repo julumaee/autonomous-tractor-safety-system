@@ -21,7 +21,17 @@ All components included | Provides simulated functional safety with speed adjust
 ros2 launch depthai_examples yolov4_publisher.launch.py camera_model:=OAK-D spatial_camera:=true
 ```
 
-The radar interface is configured to match 
+The radar interface is configured to match "track data information" format of the Nanoradar SR75. The radar should be configured correspondingly before connecting to the safety system. The radar is connected to the machine through a CAN-USB adapter. A CAN connection is opened by executing the following commands:
+
+```console
+sudo modprobe peak_usb
+sudo ip link set can0 up type can bitrate 1000000
+```
+
+To verify that the radar is sending messages through can, execute
+```console
+candump can0
+```
 
 ## System architecture:
 
