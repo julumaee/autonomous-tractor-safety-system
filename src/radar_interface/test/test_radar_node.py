@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import can
-from radar_interface.radar_node_can import RadarNode
+from radar_interface.radar_node import RadarNode
 import rclpy
 
 
@@ -48,49 +48,64 @@ class TestRadarNode(unittest.TestCase):
         dist_lat = y        # Lateral distance in meters
         vrel_long = speed   # Relative velocity in m/s
         height = z          # Height in meters
-        frame_data = self.format_radar_frame(cluster_id,
-                                             dist_long,
-                                             dist_lat,
-                                             vrel_long,
-                                             height)
+        # Frame 0: dist_long, dist_lat, vrel_long
+        frame0 = self.format_frame0(cluster_id, dist_long, dist_lat, vrel_long)
+        msg0 = can.Message(arbitration_id=0x701, data=frame0, is_extended_id=False)
 
-        # Return a CAN frame
-        return can.Message(arbitration_id=0x701, data=frame_data, is_extended_id=False)
+        # Frame 1: height
+        frame1 = self.format_frame1(cluster_id, height)
+        msg1 = can.Message(arbitration_id=0x701, data=frame1, is_extended_id=False)
+
+        return msg0, msg1
 
     @staticmethod
-    def format_radar_frame(cluster_id, dist_long, dist_lat, vrel_long, height):
-        """Format a radar CAN frame based on the specified bit layout."""
-        # Scale and encode fields
-        dist_long_scaled = int((dist_long + 100) / 0.05) & 0x1FFF  # 13 bits
-        dist_lat_scaled = int((dist_lat + 50) / 0.05) & 0x07FF     # 11 bits
-        vrel_long_scaled = int((vrel_long + 128) / 0.25) & 0x03FF  # 10 bits
-        height_scaled = int((height + 64) / 0.25) & 0x03FF         # 10 bits
-        dyn_prop = 0x00
+    def format_frame0(cluster_id, dist_long, dist_lat, vrel_long):
+        dist_long_scaled = int((dist_long + 100) / 0.05) & 0x1FFF
+        dist_lat_scaled = int((dist_lat + 50) / 0.05) & 0x07FF
+        vrel_long_scaled = int((vrel_long + 128) / 0.25) & 0x03FF
 
-        # Pack the data into bytes according to the memory layout
         frame = bytearray(8)
 
-        # Byte 0: Cluster_ID
-        frame[0] = cluster_id & 0xFF
+        # Byte 0: MSB = 0 (frame 0), lower 7 bits = cluster_id
+        frame[0] = cluster_id & 0x7F
 
-        # Bytes 1-2: DistLong (13 bits)
+        # Bytes 1-2: dist_long
         frame[1] = (dist_long_scaled >> 5) & 0xFF
         frame[2] = ((dist_long_scaled & 0x1F) << 3) & 0xF8
-
-        # Add DistLat (11 bits)
         frame[2] |= (dist_lat_scaled >> 8) & 0x07
+
+        # Byte 3: dist_lat LSB
         frame[3] = dist_lat_scaled & 0xFF
 
-        # Bytes 4-5: VrelLong (10 bits) and Height (10 bits)
+        # Bytes 4-5: vrel_long
         frame[4] = (vrel_long_scaled >> 2) & 0xFF
         frame[5] = ((vrel_long_scaled & 0x03) << 6) & 0xC0
-        frame[5] |= (height_scaled >> 4) & 0x3F
 
-        # Bytes 6-7: Height (remaining 6 bits) dynProp (3 bits) and RCS (8 bits)
-        frame[6] = ((height_scaled & 0x0F) << 4) & 0xF0  # Height (remaining bits)
-        frame[6] |= (dyn_prop << 1) & 0x0E  # DynProp (3 bits, shifted left 1)
+        # Remaining bytes unused in frame 0
+        frame[6] = 0x00
+        frame[7] = 0x00
 
-        frame[7] = 0x00  # RCS set to 0
+        return bytes(frame)
+
+    @staticmethod
+    def format_frame1(cluster_id, height):
+        height_scaled = int((height + 30) / 0.1) & 0x03FF  # height range [-30, 70]
+
+        frame = bytearray(8)
+
+        # Byte 0: MSB = 1 (frame 1), lower 7 bits = cluster_id
+        frame[0] = (1 << 7) | (cluster_id & 0x7F)
+
+        # Bytes 1-2: height
+        frame[1] = (height_scaled >> 2) & 0xFF
+        frame[2] = ((height_scaled & 0x03) << 6) & 0xC0
+
+        # Remaining bytes unused in frame 1
+        frame[3] = 0x00
+        frame[4] = 0x00
+        frame[5] = 0x00
+        frame[6] = 0x00
+        frame[7] = 0x00
 
         return bytes(frame)
 
@@ -99,14 +114,15 @@ class TestRadarNode(unittest.TestCase):
         x, y, z = 3.0, 12.0, 0.0
         frame_id = 1
         speed = 2
-        radar_frame = self.create_radar_data(x, y, z, frame_id, speed)
-        self.radar_node.process_radar_data(radar_frame)
+        frame0, frame1 = self.create_radar_data(x, y, z, frame_id, speed)
+        self.radar_node.process_radar_data(frame0)
+        self.radar_node.process_radar_data(frame1)
 
-        # Check if fusion was published
+        # Check if detection was published
         self.assertEqual(len(self.published_detections), 1,
                          msg='Detection should have been published once.')
 
-        # Verify that the fused detection has expected values
+        # Verify that the detection has expected values
         radar_detection = self.published_detections[0]
 
         self.assertEqual(radar_detection.header.frame_id, f'target_{frame_id}',

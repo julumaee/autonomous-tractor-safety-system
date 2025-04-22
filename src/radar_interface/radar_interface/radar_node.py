@@ -13,7 +13,7 @@ class RadarNode(Node):
         self.publisher_ = self.create_publisher(RadarDetection, '/radar_detections', 10)
         self.declare_parameter('can_channel', 'can0')
         self.can_channel = self.get_parameter('can_channel').value
-        
+
         # Set up the CAN interface with correct can channel and socketcan
         try:
             self.bus = can.interface.Bus(channel=self.can_channel, interface='socketcan')
@@ -21,8 +21,6 @@ class RadarNode(Node):
             self.get_logger().error(f'Failed to connect to CAN bus: {e}')
             return
         self.get_logger().info(f'Connected to CAN bus on channel {self.can_channel}')
-
-        #self.send_pointcloud_config()  # Not working correctly
 
         self.frame_buffer = {}
         self.listen_to_can()
@@ -36,26 +34,6 @@ class RadarNode(Node):
             if param.name == 'can_channel':
                 self.can_channel = param.value
         return SetParametersResult(successful=True)
-
-    def send_pointcloud_config(self):
-        """Send configuration to radar to enable point cloud mode."""
-        try:
-            # Payload: enable RadarCfg_OutputType = 0x02 (point cloud / clusters), store in NVM
-            data=[
-                0b00001000,
-                0b00000000,
-                0b00000000,
-                0b00000000,
-                0b00010000,
-                0b00000000,
-                0b00000000,
-                0b00000000
-            ]
-            msg = can.Message(arbitration_id=0x200, data=data, is_extended_id=False)
-            self.bus.send(msg)
-            self.get_logger().info("Sent radar configuration: Point Cloud mode (clusters)")
-        except can.CanError as e:
-            self.get_logger().error(f"Failed to send radar config: {e}")
 
     def listen_to_can(self):
         # Read and publish CAN messages in a loop
@@ -96,7 +74,7 @@ class RadarNode(Node):
             # Lateral distance
             dist_lat = (((frame0[2] & 0x07) << 8) | frame0[3]) * 0.05 - 50
 
-            distance = (dist_long ** 2 + dist_lat ** 2) ** 0.5
+            # distance = (dist_long ** 2 + dist_lat ** 2) ** 0.5
             # self.get_logger().info(f'Distance={distance:.2f}')  # Debugging info
 
             # Longitudinal speed

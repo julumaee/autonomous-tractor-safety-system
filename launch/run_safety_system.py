@@ -19,7 +19,7 @@ def generate_launch_description():
         # Radar Node (Processes real or simulated radar detections)
         Node(
             package='radar_interface',
-            executable='radar_node_can',
+            executable='radar_node',
             name='radar_node_can',
             output='screen'
         ),
