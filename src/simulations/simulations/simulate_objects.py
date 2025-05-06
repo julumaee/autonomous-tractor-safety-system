@@ -32,7 +32,7 @@ class ObjectSimulator(Node):
         self.declare_parameter('min_x', 0.0)
         self.declare_parameter('min_y', -10.0)
         self.declare_parameter('min_z', 0.0)
-        self.declare_parameter('max_x', 50.0)
+        self.declare_parameter('max_x', 30.0)
         self.declare_parameter('max_y', 10.0)
         self.declare_parameter('max_z', 0.0)
 

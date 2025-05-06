@@ -12,13 +12,13 @@ fusion_node:
     # Maximum distance to trust camera detections without fusion
     camera_trust_max: 12
 
-    # Rotation matrix for transforming camera coordinates to radar coordinates
-    rotation_matrix:  [0.97144628, -0.103039, 0.21371729,
-                      -0.13169109, -0.9834477, 0.12445109,
-                      0.19735646, -0.14904222, -0.96893593]
+    # Rotation matrix for transforming radar coordinates to camera coordinates
+    rotation_matrix: [1.0, 0.0, 0.0,
+                      0.0, 1.0, 0.0,
+                      0.0, 0.0, 1.0]  # Default: identity matrix
 
-    # Translation vector for transforming camera coordinates to radar coordinates
-    translation_vector: [0.1365367, 0.17875305, -0.17737524]
+    # Translation vector for transforming radar coordinates to camera coordinates
+    translation_vector: [0.0, 0.0, 0.0]  # Default: no translation
 
 safety_monitor:
   ros__parameters:
@@ -40,14 +40,14 @@ safety_monitor:
 radar_node:
   ros__parameters:
     # Can bus channel
-    can_channel: can0
+    can_channel: vcan0
 
 object_simulator:
   ros__parameters:
     # Min and max coordinate values for object simulator
-    min_x: 0.0
-    min_y: -10.0
+    min_x: 5.0
+    min_y: -5.0
     min_z: 0.0
-    max_x: 50.0
-    max_y: 10.0
+    max_x: 10.0
+    max_y: 5.0
     max_z: 0.0

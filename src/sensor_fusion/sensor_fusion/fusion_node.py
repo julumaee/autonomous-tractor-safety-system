@@ -114,23 +114,28 @@ class FusionNode(Node):
         elif camera_time < current_time - 1:  # Remove old detections
             self.camera_detections.remove(camera_detection)
 
-    def transform_radar_to_camera(self, radar_point):
-        """Transform radar coordinates to camera coordinates."""
+    def transform_camera_to_radar(self, camera_point):
+        """Transform camera coordinates to radar coordinates."""
+        # Re-map to radar coordinate frame: [z, -x, -y]
+        camera_point = Point(x=camera_point.z,
+                             y=-camera_point.x,
+                             z=-camera_point.y)
         # Convert to homogeneous coordinates
-        radar_point = np.array([radar_point.x,
-                                radar_point.y,
-                                radar_point.z, 1])
+        camera_point = np.array([camera_point.x,
+                                camera_point.y,
+                                camera_point.z, 1])
         # Apply transformation
-        camera_coordinates = np.dot(np.hstack(
-            (self.R, self.T.reshape(-1, 1))), radar_point)
+        radar_coordinates = np.dot(np.hstack(
+            (self.R, self.T.reshape(-1, 1))), camera_point)
         # Convert back to Cartesian coordinates and return as a Point()
-        return Point(x=camera_coordinates[0],
-                     y=camera_coordinates[1],
-                     z=camera_coordinates[2])
+        return Point(x=radar_coordinates[0],
+                     y=radar_coordinates[1],
+                     z=radar_coordinates[2])
 
     def verify_detection(self, detection, detection_type):
         """Verify detection validity."""
         if detection_type == 'camera':
+            detection.position = self.transform_camera_to_radar(detection.position)
             distance = np.linalg.norm([detection.position.x,
                                        detection.position.y,
                                        detection.position.z])
@@ -156,13 +161,13 @@ class FusionNode(Node):
 
     def spatial_match(self, camera_detection, radar_detection):
         """Perform spatial matching. Return True if a match is found, False if not."""
-        transformed_radar_point = self.transform_radar_to_camera(radar_detection.position)
-        distance = np.linalg.norm([transformed_radar_point.x
-                                   - camera_detection.position.x, transformed_radar_point.y
-                                   - camera_detection.position.y])
+        transformed_camera_point = self.transform_camera_to_radar(camera_detection.position)
+        distance = np.linalg.norm([transformed_camera_point.x
+                                   - radar_detection.position.x, transformed_camera_point.y
+                                   - radar_detection.position.y])
         if distance < self.distance_threshold:  # Match!
-            return True
-        return False  # No match found
+            return distance
+        return -1  # No match found
 
     def attempt_fusion(self):
         """Match radar and camera detections, and perform fusion if a match is found."""
@@ -216,31 +221,30 @@ class FusionNode(Node):
         modified_radar_detection.header = radar_detection.header
         modified_radar_detection.distance = radar_detection.distance
         modified_radar_detection.speed = radar_detection.speed
-        modified_radar_detection.position = self.transform_radar_to_camera(
-            radar_detection.position
-        )
+        modified_radar_detection.position = radar_detection.position
         modified_radar_detection.detection_type = 'radar'
         self.publisher_.publish(modified_radar_detection)
         self.radar_detections.remove(radar_detection)
-        self.get_logger().info('Publishing radar detection at distance: '
-                               f'{modified_radar_detection.distance}')
+        # self.get_logger().info('Publishing radar detection at distance: '
+        #                       f'{modified_radar_detection.distance}')
 
     def publish_camera_detection(self, camera_detection):
         """Publish camera detection as a single sensor detection."""
         modified_camera_detection = FusedDetection()
         modified_camera_detection.bbox = camera_detection.bbox
-        modified_camera_detection.position = camera_detection.position
-        distance = np.linalg.norm([camera_detection.position.x,
-                                   camera_detection.position.y,
-                                   camera_detection.position.z])
+        modified_camera_detection.position = self.transform_camera_to_radar(
+            camera_detection.position
+        )
+        distance = np.linalg.norm([modified_camera_detection.position.x,
+                                   modified_camera_detection.position.y,])
         modified_camera_detection.distance = int(distance)
         modified_camera_detection.is_tracking = camera_detection.is_tracking
         modified_camera_detection.tracking_id = camera_detection.tracking_id
         modified_camera_detection.detection_type = 'camera'
         self.publisher_.publish(modified_camera_detection)
         self.camera_detections.remove(camera_detection)
-        self.get_logger().info('Publishing camera detection at distance: '
-                               f'{modified_camera_detection.distance}')
+        # self.get_logger().info('Publishing camera detection at distance: '
+        #                       f'{modified_camera_detection.distance}')
 
     def publish_fused_detection(self, camera_detection, radar_detection):
         """Create a FusedDetection message from camera and radar detections."""
@@ -255,8 +259,13 @@ class FusionNode(Node):
         fused_detection.speed = radar_detection.speed
         fused_detection.detection_type = 'fused'
         self.publisher_.publish(fused_detection)
-        self.get_logger().info('Publishing fused detection with id: '
-                               f'{fused_detection.header.frame_id}')
+        camera_distance = np.linalg.norm([camera_detection.position.x,
+                                          camera_detection.position.y,
+                                          camera_detection.position.z])
+        self.get_logger().info('Publishing fused detection at distance: '
+                               f'{fused_detection.distance}.'
+                               f'Camera distance:'
+                               f'{camera_distance}')
 
 
 def main(args=None):

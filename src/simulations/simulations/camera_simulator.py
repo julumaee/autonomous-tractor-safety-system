@@ -51,7 +51,11 @@ class CameraSimulator(Node):
             detection.results = []
             detection.results = self.generate_object_hypotheses()
             detection.bbox = self.generate_bounding_box()  # TODO Should match the position?
-            detection.position = simulated_object.position
+            camera_position = Point(x=-simulated_object.position.y,
+                                    y=-simulated_object.position.z,
+                                    z=simulated_object.position.x
+                                    )
+            detection.position = camera_position
             detection.is_tracking = random.choice([True, False])
             if (detection.is_tracking):
                 detection.tracking_id = f'object_{simulated_object.object_id}'

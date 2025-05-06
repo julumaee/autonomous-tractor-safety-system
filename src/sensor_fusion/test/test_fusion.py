@@ -93,8 +93,8 @@ class TestFusionNode(unittest.TestCase):
 
     def test_fusion_performs_correctly(self):
         """Ensure that radar and camera detections are correctly fused and published."""
-        camera_msg = self.create_camera_detection(3.0, 12.0, 0.0)
-        radar_msg = self.create_radar_detection(3.1, 12.1, 0.0, distance=11, speed=2)
+        camera_msg = self.create_camera_detection(-3.0, 0.0, 12.0)
+        radar_msg = self.create_radar_detection(12.1, 3.1, 0.0, distance=11, speed=2)
 
         # Override parameters for testing
         self.fusion_node.time_threshold = 0.5
@@ -118,6 +118,8 @@ class TestFusionNode(unittest.TestCase):
         # Verify that the fused detection has expected values
         fused_detection = self.published_fusions[0]
 
+        self.assertEqual(fused_detection.detection_type, 'fused',
+                         msg='Detection type should be fused')
         self.assertEqual(fused_detection.tracking_id, camera_msg.tracking_id,
                          msg='Fused detection should retain camera tracking ID')
         self.assertAlmostEqual(fused_detection.position.x, radar_msg.position.x, places=2,

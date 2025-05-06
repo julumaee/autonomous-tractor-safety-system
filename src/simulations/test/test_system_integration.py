@@ -32,7 +32,7 @@ def generate_test_description():
         executable='object_simulator',
         name='object_simulator',
         parameters=[{
-            'min_x': 0.0,
+            'min_x': 5.0,
             'max_x': 10.0,
             'min_y': -5.0,
             'max_y': 5.0,
@@ -63,16 +63,23 @@ def generate_test_description():
         name='camera_node',
         output='screen'
         )
-    radar_node_can = Node(
+    radar_node = Node(
         package='radar_interface',
         executable='radar_node',
         name='radar_node',
+        parameters=[{'can_channel': 'vcan0'}],
         output='screen'
         )
     fusion_node = Node(
         package='sensor_fusion',
         executable='fusion_node',
         name='fusion_node',
+        parameters=[{
+            'rotation_matrix': [1.0, 0.0, 0.0,
+                                0.0, 1.0, 0.0,
+                                0.0, 0.0, 1.0],
+            'translation_vector': [0.0, 0.0, 0.0],
+        }],
         output='screen'
         )
     safety_monitor = Node(
@@ -87,7 +94,7 @@ def generate_test_description():
         camera_simulator,
         agopen_simulator,
         camera_node,
-        radar_node_can,
+        radar_node,
         fusion_node,
         safety_monitor,
 

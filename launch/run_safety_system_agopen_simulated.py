@@ -37,7 +37,6 @@ def generate_launch_description():
             package='sensor_fusion',
             executable='fusion_node',
             name='fusion_node',
-            parameters=['parameters.yaml'],
             output='screen'
         ),
 

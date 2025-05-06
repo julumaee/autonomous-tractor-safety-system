@@ -115,8 +115,7 @@ class RadarNode(Node):
 
             self.publisher_.publish(radar_detection_msg)
             self.get_logger().info(
-                f'Radar target ID={target_id}, Distance={radar_detection_msg.distance:.2f}, '
-                f'Speed={vrel_long:.2f} m/s'
+                f'Radar target ID={target_id}, Distance={radar_detection_msg.distance}'
             )
 
         except Exception as e:

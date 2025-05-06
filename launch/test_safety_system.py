@@ -7,30 +7,6 @@ from launch.event_handlers import OnProcessExit
 def generate_launch_description():
     # List of all nodes to launch
     nodes = [
-        # Object Simulator (Generates objects)
-        Node(
-            package='simulations',
-            executable='object_simulator',
-            name='object_simulator',
-            parameters=['parameters_simulated.yaml'],
-            output='screen'
-        ),
-
-        # Radar Simulator (Sends radar detections over CAN)
-        Node(
-            package='simulations',
-            executable='radar_simulator_can',
-            name='radar_simulator',
-            output='screen'
-        ),
-
-        # Camera Simulator (Generates camera detections)
-        Node(
-            package='simulations',
-            executable='camera_simulator',
-            name='camera_simulator',
-            output='screen'
-        ),
 
         # AgOpen Simulator (Simulates AgOpenGPS control commands)
         Node(
@@ -53,7 +29,7 @@ def generate_launch_description():
             package='radar_interface',
             executable='radar_node',
             name='radar_node',
-            parameters=['parameters_simulated.yaml'],
+            parameters=['parameters.yaml'],
             output='screen'
         ),
 
@@ -62,7 +38,7 @@ def generate_launch_description():
             package='sensor_fusion',
             executable='fusion_node',
             name='fusion_node',
-            parameters=['parameters_simulated.yaml'],
+            parameters=['parameters.yaml'],
             output='screen'
         ),
 
@@ -71,9 +47,15 @@ def generate_launch_description():
             package='safety_monitor',
             executable='safety_monitor',
             name='safety_monitor',
-            parameters=['parameters_simulated.yaml'],
+            parameters=['parameters.yaml'],
             output='screen'
-        )
+        ),
+
+        Node(
+            package='simulations',
+            executable='test_system_logger',
+            name='test_system_logger'
+        ),
     ]
 
     # Create shutdown handlers for all nodes

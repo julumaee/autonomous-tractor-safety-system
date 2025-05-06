@@ -39,6 +39,9 @@ setup(
             'agopen_simulator = simulations.agopen_simulator:main',
             'target_to_fuse_simulator = simulations.target_to_fuse_simulator:main',
             'object_simulator = simulations.simulate_objects:main',
+            'calibration_logger = simulations.calibration_logger:main',
+            'calculate_parameters = simulations.calculate_parameters:main',
+            'test_system_logger = simulations.test_system_logger:main'
         ],
     },
 )

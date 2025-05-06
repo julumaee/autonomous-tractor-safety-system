@@ -180,11 +180,11 @@ class TestSingleSensorDetection(unittest.TestCase):
         self.assertEqual(camera_detection.detection_type, 'camera',
                          msg='Sent camera detection should be of type camera')
         self.assertAlmostEqual(camera_detection.position.x,
-                               camera_msg_trusted.position.x,
+                               camera_msg_trusted.position.z,
                                places=2,
-                               msg='Position X should match camera')
+                               msg='Position X should match camera transferred to radar')
         self.assertAlmostEqual(camera_detection.position.y,
-                               camera_msg_trusted.position.y,
+                               -camera_msg_trusted.position.x,
                                places=2,
                                msg='Position Y should match camera')
 
