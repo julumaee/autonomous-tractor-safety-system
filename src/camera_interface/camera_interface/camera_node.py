@@ -33,23 +33,26 @@ class CameraNode(Node):
 
     def convert_message(self, detection):
         """Convert messages from SpatialDetection to CameraMessage format."""
-        camera_detectin_msg = CameraDetection()
-        camera_detectin_msg.results = []
+        camera_detection_msg = CameraDetection()
+        camera_detection_msg.results = []
         for result in detection.results:
-            camera_detectin_msg.results.append(result)
-        camera_detectin_msg.bbox = detection.bbox
-        camera_detectin_msg.position = detection.position
-        camera_detectin_msg.is_tracking = detection.is_tracking
-        camera_detectin_msg.tracking_id = detection.tracking_id
-        return camera_detectin_msg
+            camera_detection_msg.results.append(result)
+        camera_detection_msg.bbox = detection.bbox
+        camera_detection_msg.position = detection.position
+        camera_detection_msg.is_tracking = detection.is_tracking
+        camera_detection_msg.tracking_id = detection.tracking_id
+        camera_detection_msg.header = Header()
+        camera_detection_msg.header.stamp = self.get_clock().now().to_msg()
+        if (camera_detection_msg.is_tracking):
+            camera_detection_msg.header.frame_id = detection.tracking_id
+        else:
+            camera_detection_msg.header.frame_id = 'untracked_target'
+        return camera_detection_msg
 
     def publish_detections(self, oakd_msg):
         """Publish detections as individual CameraDetections from a SpatialDetectionArray."""
         for detection in oakd_msg.detections:
             camera_detection_msg = self.convert_message(detection)
-            camera_detection_msg.header = Header()
-            camera_detection_msg.header.stamp = self.get_clock().now().to_msg()
-            camera_detection_msg.header.frame_id = camera_detection_msg.results[0].class_id
             self.publisher_.publish(camera_detection_msg)
             self.get_logger().info('Publishing camera detection at: '
                                    f'{camera_detection_msg.position.x:.2f}, '

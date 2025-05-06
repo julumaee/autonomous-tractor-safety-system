@@ -122,7 +122,7 @@ class TestCameraNode(unittest.TestCase):
 
         # Verify the first detection
         self.assertEqual(camera_detection_1.header.frame_id,
-                         camera_msg.detections[0].results[0].class_id,
+                         camera_msg.detections[0].tracking_id,
                          msg='Detection 1 should have correct ID')
         self.assertEqual(camera_detection_1.results[0].class_id,
                          camera_msg.detections[0].results[0].class_id,
@@ -139,7 +139,7 @@ class TestCameraNode(unittest.TestCase):
 
         # Verify the second detection
         self.assertEqual(camera_detection_2.header.frame_id,
-                         camera_msg.detections[1].results[0].class_id,
+                         camera_msg.detections[1].tracking_id,
                          msg='Detection 2 should have correct ID')
         self.assertEqual(camera_detection_2.results[0].class_id,
                          camera_msg.detections[1].results[0].class_id,

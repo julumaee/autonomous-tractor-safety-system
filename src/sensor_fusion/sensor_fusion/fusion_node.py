@@ -231,6 +231,7 @@ class FusionNode(Node):
     def publish_camera_detection(self, camera_detection):
         """Publish camera detection as a single sensor detection."""
         modified_camera_detection = FusedDetection()
+        modified_camera_detection.header = camera_detection.header
         modified_camera_detection.bbox = camera_detection.bbox
         modified_camera_detection.position = self.transform_camera_to_radar(
             camera_detection.position

@@ -92,6 +92,7 @@ class TestLogger(Node):
         time_str = self.get_time_str()
         self.raw_writer.writerow([
             time_str,
+            f'Target_ID: {msg.header.frame_id}',
             msg.position.x,
             msg.position.y,
             msg.position.z,
