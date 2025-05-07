@@ -34,9 +34,13 @@ class TestLogger(Node):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         os.makedirs('test_logs', exist_ok=True)
 
-        # Combined fused+control log
-        self.fused_file = open(f'test_logs/test_log_{timestamp}.csv', 'w', newline='')
+        # Fused detection log
+        self.fused_file = open(f'test_logs/fused_log_{timestamp}.csv', 'w', newline='')
         self.fused_writer = csv.writer(self.fused_file)
+
+        # Control command log
+        self.control_file = open(f'test_logs/control_log_{timestamp}.csv', 'w', newline='')
+        self.control_writer = csv.writer(self.control_file)
 
         # Raw radar/camera detections
         self.raw_file = open(f'test_logs/raw_detections_{timestamp}.csv', 'w', newline='')
@@ -74,7 +78,7 @@ class TestLogger(Node):
 
         self.fused_writer.writerow([
             time_str,
-            'Fused detection at:',
+            f'Fused detection {msg.header.frame_id} at:',
             msg.position.x, msg.position.y, msg.position.z,
             'Distance: ',
             msg.distance
@@ -82,7 +86,7 @@ class TestLogger(Node):
 
     def log_control(self, msg):
         time_str = self.get_time_str()
-        self.fused_writer.writerow([
+        self.control_writer.writerow([
             time_str,
             'Current speed:',
             msg.speed

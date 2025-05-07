@@ -250,7 +250,10 @@ class FusionNode(Node):
     def publish_fused_detection(self, camera_detection, radar_detection):
         """Create a FusedDetection message from camera and radar detections."""
         fused_detection = FusedDetection()
-        fused_detection.header = camera_detection.header
+        if camera_detection.header.frame_id != 'untracked_target':
+            fused_detection.header = camera_detection.header
+        else:
+            fused_detection.header = radar_detection.header
         fused_detection.results = camera_detection.results
         fused_detection.bbox = camera_detection.bbox
         fused_detection.position = radar_detection.position

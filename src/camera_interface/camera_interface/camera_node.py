@@ -44,7 +44,7 @@ class CameraNode(Node):
         camera_detection_msg.header = Header()
         camera_detection_msg.header.stamp = self.get_clock().now().to_msg()
         if (camera_detection_msg.is_tracking):
-            camera_detection_msg.header.frame_id = detection.tracking_id
+            camera_detection_msg.header.frame_id = 'target_' + detection.tracking_id
         else:
             camera_detection_msg.header.frame_id = 'untracked_target'
         return camera_detection_msg
