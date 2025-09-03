@@ -1,5 +1,7 @@
 # ROS2 project for an autonomous tractor safety system
 
+![System architecture](system_architecture.png)
+
 This repository contains a ROS2 project for an autonomous tractor safety system, which relies on radar and camera sensors for object detection. The aim of this project was to create a "Version 0" grade system, which can be improved and developed in the future. Versions 0, 1 and 2 are explained below.
 
 This project is done as part of a Master's Thesis work in the University of Oulu.
@@ -34,8 +36,6 @@ candump can0
 ```
 
 ## System architecture:
-
-![System architecture](system_architecture.png)
 
 ### Camera node
 - Connects to the camera using depth-ai
