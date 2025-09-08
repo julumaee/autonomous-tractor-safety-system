@@ -12,16 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import find_packages, setup
-import os
 from glob import glob
+import os
+
+from setuptools import find_packages, setup
+
 
 package_name = 'simulations'
-
-def files(pattern, recursive=False):
-    paths = glob(pattern, recursive=recursive)
-    # setuptools wants files only (not directories)
-    return [p for p in paths if os.path.isfile(p)]
 
 setup(
     name=package_name,
@@ -31,7 +28,10 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (f'share/{package_name}/launch', files('launch/*.launch.py')),
+        (f'share/{package_name}/config',
+            [p for p in glob('config/*') if os.path.isfile(p)]),
+        (f'share/{package_name}/launch',
+            [p for p in glob('launch/*.launch.py') if os.path.isfile(p)]),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

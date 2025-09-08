@@ -1,10 +1,40 @@
+# Copyright 2025 Eemil Kulmala, University of Oulu
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import os
+
+from ament_index_python.packages import get_package_share_path
 from launch import LaunchDescription
-from launch_ros.actions import Node
-from launch.actions import LogInfo, RegisterEventHandler, Shutdown
+from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    # Resolve default parameter file inside the installed package
+    pkg_share = get_package_share_path('simulations')
+    default_params = os.path.join(pkg_share, 'config', 'parameters_simulated.yaml')
+
+    # Allow overriding from CLI: params:=/abs/path/to/custom.yaml
+    params_arg = DeclareLaunchArgument(
+        'params',
+        default_value=default_params,
+        description='Path to parameters_simulated YAML'
+    )
+    params = LaunchConfiguration('params')
+
     # List of all nodes to launch
     nodes = [
         # Object Simulator (Generates objects)
@@ -12,7 +42,7 @@ def generate_launch_description():
             package='simulations',
             executable='object_simulator',
             name='object_simulator',
-            parameters=['parameters_simulated.yaml'],
+            parameters=[params],
             output='screen'
         ),
 
@@ -53,7 +83,7 @@ def generate_launch_description():
             package='radar_interface',
             executable='radar_node',
             name='radar_node',
-            parameters=['parameters_simulated.yaml'],
+            parameters=[params],
             output='screen'
         ),
 
@@ -62,7 +92,7 @@ def generate_launch_description():
             package='sensor_fusion',
             executable='fusion_node',
             name='fusion_node',
-            parameters=['parameters_simulated.yaml'],
+            parameters=[params],
             output='screen'
         ),
 
@@ -71,7 +101,7 @@ def generate_launch_description():
             package='safety_monitor',
             executable='safety_monitor',
             name='safety_monitor',
-            parameters=['parameters_simulated.yaml'],
+            parameters=[params],
             output='screen'
         )
     ]
@@ -88,10 +118,11 @@ def generate_launch_description():
     ]
 
     return LaunchDescription([
+        params_arg,
         # Log message to indicate test start
-        LogInfo(msg="Launching all nodes..."),
+        LogInfo(msg='Launching all nodes...'),
         *nodes,
         *shutdown_handlers,
         # Log message to indicate test setup completion
-        LogInfo(msg="All nodes launched successfully."),
+        LogInfo(msg='All nodes launched successfully.'),
     ])

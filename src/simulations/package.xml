@@ -12,13 +12,13 @@
   <exec_depend>launch_ros</exec_depend>
 
   <!-- Gazebo + bridge -->
-  <exec_depend>ros_gz_sim</exec_depend>
-  <exec_depend>ros_gz_bridge</exec_depend>
+  <!-- exec_depend>ros_gz_sim</exec_depend-->
+  <!-- exec_depend>ros_gz_bridge</exec_depend-->
 
   <!-- Messages used in bridges -->
-  <exec_depend>geometry_msgs</exec_depend>
+  <!--exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend-->
 
   <!-- Pipeline pkgs -->
   <exec_depend>radar_interface</exec_depend>
@@ -27,6 +27,7 @@
   <exec_depend>safety_monitor</exec_depend>
   <exec_depend>navigation_interface</exec_depend>
   <exec_depend>tractor_control</exec_depend>
+  <exec_depend>tractor_safety_system_interfaces</exec_depend>
 
   <!-- Test deps -->
   <test_depend>ament_copyright</test_depend>
