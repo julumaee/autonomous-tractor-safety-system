@@ -13,8 +13,15 @@
 # limitations under the License.
 
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'simulations'
+
+def files(pattern, recursive=False):
+    paths = glob(pattern, recursive=recursive)
+    # setuptools wants files only (not directories)
+    return [p for p in paths if os.path.isfile(p)]
 
 setup(
     name=package_name,
@@ -24,6 +31,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (f'share/{package_name}/launch', files('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
