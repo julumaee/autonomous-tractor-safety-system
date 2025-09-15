@@ -49,7 +49,13 @@ setup(
             'object_simulator = simulations.simulate_objects:main',
             'calibration_logger = simulations.calibration_logger:main',
             'calculate_parameters = simulations.calculate_parameters:main',
-            'test_system_logger = simulations.test_system_logger:main'
+            'test_system_logger = simulations.test_system_logger:main',
+            'twist_to_control = simulations.control_simulator:main',
+            'control_to_twist = simulations.control_to_twist:main',
+            'lidar_to_radar = simulations.lidar_to_radar:main',
+            'camera_to_camera = simulations.camera_to_camera:main',
+            'spatial_from_yolo = simulations.spatial_from_yolo:main',
+            'laser_to_radar = simulations.laser_to_radar:main'
         ],
     },
 )

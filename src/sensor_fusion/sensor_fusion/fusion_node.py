@@ -47,7 +47,7 @@ class FusionNode(Node):
         # Declare parameters with default values
         self.declare_parameter('time_threshold', 0.5)         # Default value 0.5 seconds
         self.declare_parameter('distance_threshold', 1.0)     # Default value 1 meter
-        self.declare_parameter('radar_trust_min', 4)          # Default value 4 meters
+        self.declare_parameter('radar_trust_min', 2)          # Default value 2 meters
         self.declare_parameter('camera_trust_max', 12)        # Default value 12 meters
         self.declare_parameter('detection_score_trust', 0.5)  # Default value 0.5
         self.declare_parameter('rotation_matrix', [1.0, 0.0, 0.0,
