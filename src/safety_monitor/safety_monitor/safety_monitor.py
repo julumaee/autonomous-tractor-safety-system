@@ -184,8 +184,8 @@ class SafetyMonitor(Node):
             else:
                 self.get_logger().info('Vehicle will remain stopped for at least'
                                        f'{self.vehicle_stopped_reset_time -
-                                       (self.get_clock().now() -
-                                       self.stop_time).nanoseconds / 1e9} seconds.'
+                                          (self.get_clock().now() -
+                                           self.stop_time).nanoseconds / 1e9} seconds.'
                                        ' Ignoring AgOpenGPS forward commands.')
         elif self.vehicle_state == 'slow':
             if (self.agopen_speed > self.speed_override_2):
