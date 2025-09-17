@@ -38,7 +38,6 @@ class TwistToCustomControl(Node):
         # Vehicle & mapping params
         self.declare_parameter('wheelbase', 2.5)            # meters
         self.declare_parameter('max_steer_rad', 0.8)        # radians
-        self.declare_parameter('speed_limit_mps', 10.0)     # m/s clamp
         self.declare_parameter('v_epsilon', 0.2)            # m/s (avoid div by 0)
 
         # Scaling to integers
@@ -53,7 +52,6 @@ class TwistToCustomControl(Node):
         # Read params
         self.L = float(self.get_parameter('wheelbase').value)
         self.max_steer_rad = float(self.get_parameter('max_steer_rad').value)
-        self.speed_limit_mps = float(self.get_parameter('speed_limit_mps').value)
         self.v_eps = float(self.get_parameter('v_epsilon').value)
         self.k_steer = float(self.get_parameter('steer_unit_per_rad').value)
         self.k_speed = float(self.get_parameter('speed_unit_per_mps').value)
@@ -62,7 +60,6 @@ class TwistToCustomControl(Node):
 
         # Derived integer limits
         self.max_steer_int = int(round(self.max_steer_rad * self.k_steer))
-        self.max_speed_int = int(round(self.speed_limit_mps * self.k_speed))
 
         self.sub = self.create_subscription(Twist, twist_topic, self._on_twist, 10)
         self.pub = self.create_publisher(ControlCommand, out_topic, 10)
@@ -72,7 +69,7 @@ class TwistToCustomControl(Node):
         )
 
     def _on_twist(self, msg: Twist):
-        v = clamp(float(msg.linear.x), -self.speed_limit_mps, self.speed_limit_mps)
+        v = float(msg.linear.x)
         w = float(msg.angular.z)
 
         # Bicycle model: yaw rate -> steering angle
@@ -85,7 +82,6 @@ class TwistToCustomControl(Node):
         speed_int = int(round(v * self.k_speed))
 
         steer_int = clamp(steer_int, -self.max_steer_int, self.max_steer_int)
-        speed_int = clamp(speed_int, -self.max_speed_int, self.max_speed_int)
 
         out = ControlCommand()
         out.steering_angle = steer_int

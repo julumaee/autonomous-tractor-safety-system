@@ -61,6 +61,7 @@ class SafetyMonitor(Node):
         # Initialize variables
         self.vehicle_state = 'agopen'   # Vehicle state: 'agopen, moderate, slow or stopped'
         self.latest_steering_angle = 0  # Latest steering angle from AgOpenGPS
+        self.agopen_speed = 0           # Latest speed from AgOpenGPS
         self.stop_time = self.get_clock().now()  # Save the time when vehicle stopped
 
         # Time of last detection inside safety_distance_1
@@ -88,19 +89,25 @@ class SafetyMonitor(Node):
                 self.vehicle_stopped_reset_time = param.value
         return SetParametersResult(successful=True)
 
+    def agopen_control(self, agopen_cmd):
+        """Process AgOpenGPS control commands."""
+        self.latest_steering_angle = agopen_cmd.steering_angle
+        self.agopen_speed = agopen_cmd.speed
+        self.speed_control()
+
     def control_speed_state(self, detection):
         """Control the tractor speed state based on detection distances."""
         distance = detection.distance
-        self.get_logger().info('Received detection: '
-                               f'{detection.header.frame_id} at distance: {distance}m')
+        # self.get_logger().info('Received detection: '
+        #                        f'{detection.header.frame_id} at distance: {distance}m')
 
         # Modify the vehicle state based on received target distance
         if distance <= self.stop_distance:
-            self.stop_time = self.get_clock().now()
-
             if self.vehicle_state != 'stopped':
+                self.get_logger().info(f'Obstacle at {distance}m! Stopping the vehicle.')
                 self.send_stop_command()
                 self.vehicle_state = 'stopped'
+            self.stop_time = self.get_clock().now()
 
         elif distance <= self.safety_distance_2:
             self.last_detection_time_2 = self.get_clock().now()
@@ -119,7 +126,6 @@ class SafetyMonitor(Node):
         stop_cmd = ControlCommand()
         stop_cmd.speed = 0
         stop_cmd.steering_angle = self.latest_steering_angle
-        self.stop_time = self.get_clock().now()
         self.publisher_.publish(stop_cmd)
 
     def state_control(self):
@@ -133,61 +139,84 @@ class SafetyMonitor(Node):
                     1e9 > self.vehicle_stopped_reset_time):
                 self.vehicle_state = 'slow'
                 self.last_detection_time_2 = current_time  # Reset timer to delay speed change
+                self.get_logger().info('Vehicle has been stopped for '
+                                       f'{self.vehicle_stopped_reset_time} seconds. '
+                                       'Changing state to "slow".')
         elif self.vehicle_state == 'slow':
             if time_diff_2 > self.detection_active_reset_time:
                 self.vehicle_state = 'moderate'
                 self.last_detection_time_1 = current_time  # Reset timer to delay speed change
+                self.get_logger().info('No detections inside safety_distance_2 '
+                                       f'for {self.detection_active_reset_time} seconds. '
+                                       'Changing state to "moderate".')
         elif self.vehicle_state == 'moderate':
             if time_diff_1 > self.detection_active_reset_time:
                 self.vehicle_state = 'agopen'
+                self.get_logger().info('No detections inside safety_distance_1 '
+                                       f'for {self.detection_active_reset_time} seconds. '
+                                       'Changing state to "agopen".')
         elif self.vehicle_state == 'agopen':
             pass
         else:
             self.vehicle_state = 'stopped'
-            self.send_stop_command()
+            self.speed_control()
+            self.stop_time = self.get_clock().now()
             self.get_logger().info('Vehicle in unknown state. Stopping the vehicle.')
 
-    def agopen_control(self, agopen_cmd):
+    def speed_control(self):
         """Override agopen control commands based on the speed state."""
+        control_cmd = ControlCommand()
+        control_cmd.steering_angle = self.latest_steering_angle
+
         if self.vehicle_state == 'agopen':
             # Forward AgOpenGPS commands if no active detections
+            control_cmd.speed = self.agopen_speed
             self.get_logger().info('No active detections, forwarding AgOpenGPS control commands.')
-            self.publisher_.publish(agopen_cmd)
-            self.latest_steering_angle = agopen_cmd.steering_angle
+            self.publisher_.publish(control_cmd)
         elif self.vehicle_state == 'stopped':
-            # Publish no commands, when in stop state
-            self.get_logger().info('Vehicle will remain stopped for at least'
-                                   f'{self.vehicle_stopped_reset_time -
-                                      (self.get_clock().now() -
-                                       self.stop_time).nanoseconds / 1e9} seconds.')
+            # Publish only reverse commands, when in stop state
+            if self.agopen_speed < 0:
+                control_cmd.speed = self.agopen_speed
+                self.publisher_.publish(control_cmd)
+                self.get_logger().info('Vehicle in state "stopped", '
+                                       'but AgOpenGPS command is reverse. '
+                                       'Forwarding AgOpenGPS control commands.')
+            else:
+                self.get_logger().info('Vehicle will remain stopped for at least'
+                                       f'{self.vehicle_stopped_reset_time -
+                                       (self.get_clock().now() -
+                                       self.stop_time).nanoseconds / 1e9} seconds.'
+                                       ' Ignoring AgOpenGPS forward commands.')
         elif self.vehicle_state == 'slow':
-            if (agopen_cmd.speed > self.speed_override_2):
-                agopen_cmd.speed = self.speed_override_2
+            if (self.agopen_speed > self.speed_override_2):
+                control_cmd.speed = self.speed_override_2
                 self.get_logger().info('Vehicle in state "slow", '
                                        'overriding AgOpenGPS speed command to '
                                        f'{self.speed_override_2}.')
             else:
+                control_cmd.speed = self.agopen_speed
                 self.get_logger().info('Vehicle in state "slow", '
-                                       'but agopen speed is under '
+                                       f'but agopen speed ( {self.agopen_speed} ) is under '
                                        f'{self.speed_override_2}\
                                        . Forwarding AgOpenGPS control commands.')
-            self.publisher_.publish(agopen_cmd)
-            self.latest_steering_angle = agopen_cmd.steering_angle
+            self.publisher_.publish(control_cmd)
         elif self.vehicle_state == 'moderate':
-            if (agopen_cmd.speed > self.speed_override_1):
-                agopen_cmd.speed = self.speed_override_1
+            if (self.agopen_speed > self.speed_override_1):
+                control_cmd.speed = self.speed_override_1
                 self.get_logger().info('Vehicle in state "moderate" , '
                                        'overriding AgOpenGPS speed command to '
                                        f'{self.speed_override_1}.')
             else:
+                control_cmd.speed = self.agopen_speed
                 self.get_logger().info('Vehicle in state "moderate", '
-                                       'but agopen speed is under '
-                                       f'{self.speed_override_1}'
+                                       f'but agopen speed ( {self.agopen_speed} )'
+                                       f'is under {self.speed_override_1}'
                                        '. Forwarding AgOpenGPS control commands.')
-            self.publisher_.publish(agopen_cmd)
-            self.latest_steering_angle = agopen_cmd.steering_angle
+            self.publisher_.publish(control_cmd)
         else:
-            self.send_stop_command()
+            control_cmd.speed = 0
+            self.publisher_.publish(control_cmd)
+            self.stop_time = self.get_clock().now()
             self.get_logger().info('Vehicle in unknown state. Stopping the vehicle.')
 
 

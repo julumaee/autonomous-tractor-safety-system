@@ -7,7 +7,7 @@ fusion_node:
     distance_threshold: 1.0  # meters
 
     # Minimum distance to trust radar detections without fusion
-    radar_trust_min: 2
+    radar_trust_min: 0
 
     # Maximum distance to trust camera detections without fusion
     camera_trust_max: 12
