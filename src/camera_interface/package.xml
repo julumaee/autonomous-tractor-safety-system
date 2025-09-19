@@ -9,6 +9,9 @@
 
   <depend>rclpy</depend>
 
+  <build_depend>depthai_ros_msgs</build_depend>
+  <exec_depend>depthai_ros_msgs</exec_depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

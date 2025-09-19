@@ -24,6 +24,7 @@ from vision_msgs.msg import BoundingBox2D, ObjectHypothesis
 
 
 class CameraSimulator(Node):
+
     def __init__(self):
         super().__init__('camera_simulator')
         self.publisher_ = self.create_publisher(SpatialDetectionArray,

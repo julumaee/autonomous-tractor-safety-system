@@ -17,18 +17,12 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
+from ultralytics_ros.msg import YoloResult
 from vision_msgs.msg import BoundingBox2D, Detection2DArray, ObjectHypothesis
-
-# Try to import ultralytics_ros message
-HAVE_YOLO_RESULT = False
-try:
-    from ultralytics_ros.msg import YoloResult
-    HAVE_YOLO_RESULT = True
-except Exception:
-    pass
 
 
 class SpatialFromYolo(Node):
+
     def __init__(self):
         super().__init__('spatial_from_yolo')
         self.declare_parameter('dets2d_topic', '/yolo/result')  # YoloResult or Detection2DArray
@@ -49,10 +43,10 @@ class SpatialFromYolo(Node):
         self.create_subscription(Image,
                                  self.get_parameter('depth_topic').value,
                                  self.on_depth,
-                                 qos)
+                                 10)
 
         dets_topic = self.get_parameter('dets2d_topic').value
-        self.create_subscription(YoloResult, dets_topic, self.on_yolo_result, 10)
+        self.create_subscription(YoloResult, dets_topic, self.on_yolo_result, qos)
 
         self.pub = self.create_publisher(SpatialDetectionArray,
                                          self.get_parameter('out_topic').value,
@@ -66,22 +60,44 @@ class SpatialFromYolo(Node):
 
     def on_depth(self, msg: Image):
         if msg.encoding != '32FC1':
-            # gazebo bridge usually gives 32FC1; if 16UC1, you could convert here
+            self.get_logger().warn(f'Depth encoding is {msg.encoding}, expected 32FC1')
             return
         self.depth = np.frombuffer(msg.data,
                                    dtype=np.float32).reshape((msg.height, msg.width))
+        if not np.isfinite(self.depth).any():
+            self.get_logger().warn('Depth frame has no finite values (all inf/NaN)')
 
-    # If we get YoloResult, extract the contained Detection2DArray
     def on_yolo_result(self, msg):
-        d2d = getattr(msg, 'detections', None) \
-              or getattr(msg, 'result', None) \
-              or getattr(msg, 'detection_array', None)
-        if d2d is not None and isinstance(d2d, Detection2DArray):
-            self._emit_spatial(d2d)
+        for key in ('detections', 'result', 'detection_array'):
+            d2d = getattr(msg, key, None)
+            if d2d is not None:
+                break
 
-    # If we get Detection2DArray directly
-    def on_d2d(self, msg: Detection2DArray):
-        self._emit_spatial(msg)
+        if d2d is None:
+            self.get_logger().warn('YoloResult has no detections/result/detection_array field')
+            return
+
+        if not hasattr(d2d, 'header') or not hasattr(d2d, 'detections'):
+            self.get_logger().warn(f'Detections field is unexpected type: {type(d2d)}')
+            return
+        if not isinstance(d2d.detections, (list, tuple)):
+            self.get_logger().warn('detections member is not a list/tuple')
+            return
+
+        # Wrap into a real Detection2DArray message (ensures fields exist)
+        msg2 = Detection2DArray()
+        msg2.header = d2d.header
+        msg2.detections = d2d.detections
+        self._emit_spatial(msg2)
+
+    def _center_xy(self, bb_center):
+        # Works with both Pose2D{x,y,theta} and Pose2D{position{x,y}, theta}
+        if hasattr(bb_center, 'x') and hasattr(bb_center, 'y'):
+            return float(bb_center.x), float(bb_center.y)
+        if hasattr(bb_center, 'position'):
+            return float(bb_center.position.x), float(bb_center.position.y)
+        # Last resort: try dict-like access or default zeros
+        return float(getattr(bb_center, 'x', 0.0)), float(getattr(bb_center, 'y', 0.0))
 
     def _emit_spatial(self, msg: Detection2DArray):
         if self.depth is None or self.K is None:
@@ -96,8 +112,7 @@ class SpatialFromYolo(Node):
 
         for det in msg.detections:
             bb: BoundingBox2D = det.bbox
-            u = float(bb.center.x)
-            v = float(bb.center.y)
+            u, v = self._center_xy(bb.center)
             w = max(2.0, float(bb.size_x))
             h = max(2.0, float(bb.size_y))
 
@@ -109,6 +124,11 @@ class SpatialFromYolo(Node):
             v1 = int(np.clip(v+dv, 0, H-1))
             win = self.depth[v0:v1+1, u0:u1+1]
             if win.size == 0:
+                self.get_logger().warn('Depth window empty after clipping')
+                continue
+            mask = np.isfinite(win) & (win > 0.05)
+            if not mask.any():
+                self.get_logger().warn('No finite depths inside bbox window')
                 continue
             z = win[np.isfinite(win) & (win > 0.05)]
             if z.size == 0:
@@ -118,9 +138,8 @@ class SpatialFromYolo(Node):
             Y = (v - cy) * Z / fy
 
             sd = SpatialDetection()
-            sd.header = msg.header
-            sd.bbox.center.x = u
-            sd.bbox.center.y = v
+            sd.bbox.center.position.x = u
+            sd.bbox.center.position.y = v
             sd.bbox.size_x = w
             sd.bbox.size_y = h
             # copy first hypothesis if present

@@ -11,6 +11,31 @@
     </include>
 
     <!-- Some obstacles to test safety zones -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_1</name>
+      <pose>20 0 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_2</name>
+      <pose>10 5 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_3</name>
+      <pose>15 -5 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_4</name>
+      <pose>10 -1 0 0 0 -1.5708</pose>
+    </include>
+
+    <!--
     <model name="box_obstacle">
       <pose>5 0 0.5 0 0 0</pose>
       <link name="link">
@@ -19,14 +44,16 @@
       </link>
     </model>
 
+     -->
+<!--
     <model name="test_wall">
-      <pose>2 0 1 0 0 0</pose>
+      <pose>3 0 1 0 0 0</pose>
       <link name="link">
         <collision name="col"><geometry><box><size>0.2 5 2</size></box></geometry></collision>
         <visual name="vis"><geometry><box><size>0.2 5 2</size></box></geometry></visual>
       </link>
     </model>
-
+-->
     <!-- Our tractor model -->
     <include>
       <uri>model://tractor_simple</uri>

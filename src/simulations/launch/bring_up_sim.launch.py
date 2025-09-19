@@ -65,10 +65,8 @@ def generate_launch_description():
                                              default_value='/control')
 
     # Perception glue
-    yolo_result_topic = DeclareLaunchArgument('yolo_result_topic',
-                                              default_value='/yolo/result')
     d2d_topic = DeclareLaunchArgument('dets2d_topic',
-                                      default_value='/sim/cam/detections2d')
+                                      default_value='/yolo/result')
     spatial_out_topic = DeclareLaunchArgument('spatial_out_topic',
                                               default_value='/color/yolov4_Spatial_detections')
     use_d2d_relay = DeclareLaunchArgument('use_d2d_relay',
@@ -172,17 +170,6 @@ def generate_launch_description():
         }]
     )
 
-    laser_to_radar = Node(
-        package='simulations',
-        executable='laser_to_radar',
-        name='laser_to_radar',
-        parameters=[{
-            'scan_topic': LaunchConfiguration('lidar_scan_topic'),
-            'base_frame': LaunchConfiguration('base_frame'),
-            'sensor_frame': LaunchConfiguration('lidar_frame'),
-            'y_max': 0.6,
-        }])
-
     # LiDAR → simple radar detections
     lidar_to_radar = Node(
         package='simulations',
@@ -192,7 +179,6 @@ def generate_launch_description():
         parameters=[{
             'cloud_topic':  LaunchConfiguration('lidar_points_topic'),
             'base_frame':   LaunchConfiguration('base_frame'),
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
         }]
     )
 
@@ -237,7 +223,7 @@ def generate_launch_description():
         lidar_scan_topic,
         cam_opt_frame, lidar_frame,
         cmd_vel_in, nav_cmd_out_topic, safety_out_topic,
-        yolo_result_topic, d2d_topic, spatial_out_topic, use_d2d_relay,
+        d2d_topic, spatial_out_topic, use_d2d_relay,
         bridge_depth_cloud,
 
         # nodes
@@ -245,7 +231,6 @@ def generate_launch_description():
         bridge_depth_points,
         tf_cam, tf_lidar,
         spatial_from_yolo,
-        laser_to_radar,
         lidar_to_radar,
         twist_to_control,
         control_to_twist,

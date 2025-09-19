@@ -20,6 +20,7 @@ from tractor_safety_system_interfaces.msg import CameraDetection
 
 
 class CameraNode(Node):
+
     def __init__(self):
         super().__init__('camera_node')
         self.publisher_ = self.create_publisher(CameraDetection, '/camera_detections', 10)
@@ -54,10 +55,10 @@ class CameraNode(Node):
         for detection in oakd_msg.detections:
             camera_detection_msg = self.convert_message(detection)
             self.publisher_.publish(camera_detection_msg)
-            self.get_logger().info('Publishing camera detection at: '
-                                   f'{camera_detection_msg.position.x:.2f}, '
-                                   f'{camera_detection_msg.position.y:.2f}, '
-                                   f'{camera_detection_msg.position.z:.2f}')
+            # self.get_logger().info('Publishing camera detection at: '
+            #                       f'{camera_detection_msg.position.x:.2f}, '
+            #                       f'{camera_detection_msg.position.y:.2f}, '
+            #                       f'{camera_detection_msg.position.z:.2f}')
 
 
 def main(args=None):

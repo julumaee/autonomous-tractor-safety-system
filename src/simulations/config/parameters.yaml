@@ -7,10 +7,10 @@ fusion_node:
     distance_threshold: 1.0  # meters
 
     # Minimum distance to trust radar detections without fusion
-    radar_trust_min: 2
+    radar_trust_min: 2.0
 
     # Maximum distance to trust camera detections without fusion
-    camera_trust_max: 12
+    camera_trust_max: 12.0
 
     # Rotation matrix for transforming camera coordinates to radar coordinates
     rotation_matrix:  [0.97144628, -0.103039, 0.21371729,
@@ -24,14 +24,14 @@ safety_monitor:
   ros__parameters:
   
     # Safety distances for target proximity
-    safety_distance_1: 40  # meters
-    safety_distance_2: 10  # meters
-    safety_distance_3: 3   # meters
+    safety_distance_1: 40.0  # meters
+    safety_distance_2: 10.0  # meters
+    safety_distance_3: 3.0   # meters
 
     # Speed overrides for safety distances
-    speed_override_1: 5    # override speed for safety_distance_1 (m/s)
-    speed_override_2: 2    # override speed for safety_distance_2 (m/s)
-    speed_override_3: 0    # override speed for safety_distance_3 (stop)
+    speed_override_1: 1.5    # override speed for safety_distance_1 (m/s)
+    speed_override_2: 1.0    # override speed for safety_distance_2 (m/s)
+    speed_override_3: 0.0    # override speed for safety_distance_3 (stop)
 
     # Time reset values
     detection_active_reset_time: 5.0 # If nothing is detected for this time period, speed control is given to AgOpen

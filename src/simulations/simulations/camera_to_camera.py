@@ -26,6 +26,7 @@ from vision_msgs.msg import BoundingBox2D, Detection2DArray, ObjectHypothesis
 
 
 class DepthDetectionsToCamera(Node):
+
     def __init__(self):
         super().__init__('depth_dets_to_camera')
         # Params

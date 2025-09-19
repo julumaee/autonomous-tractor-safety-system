@@ -116,11 +116,11 @@ class TargetSimulationNode(Node):
     def publish_radar_detection(self, target_position_world):
         """Calculate and publish radar detection based on the target position."""
         distance = np.linalg.norm([target_position_world.x, target_position_world.y])
-        speed = random.randint(-30, 30)
+        speed = random.uniform(-30, 30)
         # Create and publish RadarDetection
         radar_detection = RadarDetection()
         radar_detection.header.stamp = self.get_clock().now().to_msg()
-        radar_detection.distance = int(distance)
+        radar_detection.distance = distance
         radar_detection.position = target_position_world
         radar_detection.speed = speed
         self.radar_publisher.publish(radar_detection)

@@ -38,11 +38,11 @@ class SafetyMonitor(Node):
         self.timer = self.create_timer(0.1, self.state_control)
 
         # Declare parameters with default values
-        self.declare_parameter('safety_distance_1', 40)
-        self.declare_parameter('safety_distance_2', 10)
-        self.declare_parameter('stop_distance', 3)
-        self.declare_parameter('speed_override_1', 5)
-        self.declare_parameter('speed_override_2', 2)
+        self.declare_parameter('safety_distance_1', 40.0)
+        self.declare_parameter('safety_distance_2', 10.0)
+        self.declare_parameter('stop_distance', 3.0)
+        self.declare_parameter('speed_override_1', 5.0)
+        self.declare_parameter('speed_override_2', 2.0)
         self.declare_parameter('detection_active_reset_time', 5.0)
         self.declare_parameter('vehicle_stopped_reset_time', 5.0)
 
@@ -60,8 +60,8 @@ class SafetyMonitor(Node):
 
         # Initialize variables
         self.vehicle_state = 'agopen'   # Vehicle state: 'agopen, moderate, slow or stopped'
-        self.latest_steering_angle = 0  # Latest steering angle from AgOpenGPS
-        self.agopen_speed = 0           # Latest speed from AgOpenGPS
+        self.latest_steering_angle = 0.0  # Latest steering angle from AgOpenGPS
+        self.agopen_speed = 0.0         # Latest speed from AgOpenGPS
         self.stop_time = self.get_clock().now()  # Save the time when vehicle stopped
 
         # Time of last detection inside safety_distance_1
@@ -104,7 +104,7 @@ class SafetyMonitor(Node):
         # Modify the vehicle state based on received target distance
         if distance <= self.stop_distance:
             if self.vehicle_state != 'stopped':
-                self.get_logger().info(f'Obstacle at {distance}m! Stopping the vehicle.')
+                self.get_logger().info(f'Obstacle at {distance} m! Stopping the vehicle.')
                 self.send_stop_command()
                 self.vehicle_state = 'stopped'
             self.stop_time = self.get_clock().now()
@@ -113,18 +113,24 @@ class SafetyMonitor(Node):
             self.last_detection_time_2 = self.get_clock().now()
 
             if (self.vehicle_state != 'stopped'):
+                if (self.vehicle_state != 'slow'):
+                    self.get_logger().info(f'Detection at {distance} m, '
+                                           'entering slow speed state.')
                 self.vehicle_state = 'slow'
 
         elif distance <= self.safety_distance_1:
             self.last_detection_time_1 = self.get_clock().now()
 
             if self.vehicle_state not in ['stopped', 'slow']:
+                if (self.vehicle_state != 'moderate'):
+                    self.get_logger().info(f'Detection at {distance} m, '
+                                           'entering moderate speed state.')
                 self.vehicle_state = 'moderate'
 
     def send_stop_command(self):
         """Send a stop command."""
         stop_cmd = ControlCommand()
-        stop_cmd.speed = 0
+        stop_cmd.speed = 0.0
         stop_cmd.steering_angle = self.latest_steering_angle
         self.publisher_.publish(stop_cmd)
 
@@ -175,7 +181,7 @@ class SafetyMonitor(Node):
             self.publisher_.publish(control_cmd)
         elif self.vehicle_state == 'stopped':
             # Publish only reverse commands, when in stop state
-            if self.agopen_speed < 0:
+            if self.agopen_speed < 0.0:
                 control_cmd.speed = self.agopen_speed
                 self.publisher_.publish(control_cmd)
                 self.get_logger().info('Vehicle in state "stopped", '
@@ -214,7 +220,7 @@ class SafetyMonitor(Node):
                                        '. Forwarding AgOpenGPS control commands.')
             self.publisher_.publish(control_cmd)
         else:
-            control_cmd.speed = 0
+            control_cmd.speed = 0.0
             self.publisher_.publish(control_cmd)
             self.stop_time = self.get_clock().now()
             self.get_logger().info('Vehicle in unknown state. Stopping the vehicle.')

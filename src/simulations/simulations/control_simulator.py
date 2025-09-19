@@ -29,7 +29,7 @@ class TwistToCustomControl(Node):
     Convert keyboard Twist (/cmd_vel) to custom control commands.
 
       - steering_angle: int32 (scaled from radians)
-      - speed:          int32 (scaled from m/s)
+      - speed:          float32 (scaled from m/s)
     """
 
     def __init__(self):
@@ -59,7 +59,7 @@ class TwistToCustomControl(Node):
         out_topic = self.get_parameter('out_topic').value
 
         # Derived integer limits
-        self.max_steer_int = int(round(self.max_steer_rad * self.k_steer))
+        self.max_steer_scaled = self.max_steer_rad * self.k_steer
 
         self.sub = self.create_subscription(Twist, twist_topic, self._on_twist, 10)
         self.pub = self.create_publisher(ControlCommand, out_topic, 10)
@@ -78,16 +78,16 @@ class TwistToCustomControl(Node):
         delta = clamp(delta, -self.max_steer_rad, self.max_steer_rad)
 
         # Scale to ints
-        steer_int = int(round(delta * self.k_steer))
-        speed_int = int(round(v * self.k_speed))
+        steer_scaled = delta * self.k_steer
+        speed_scaled = v * self.k_speed
 
-        steer_int = clamp(steer_int, -self.max_steer_int, self.max_steer_int)
+        steer_scaled = clamp(steer_scaled, -self.max_steer_scaled, self.max_steer_scaled)
 
         out = ControlCommand()
-        out.steering_angle = steer_int
-        out.speed = speed_int
+        out.steering_angle = steer_scaled
+        out.speed = speed_scaled
         self.get_logger().info(
-            f'Publishing ControlCommand: steer {steer_int} | speed {speed_int}'
+            f'Publishing ControlCommand: steer {steer_scaled} | speed {speed_scaled}'
         )
         self.pub.publish(out)
 

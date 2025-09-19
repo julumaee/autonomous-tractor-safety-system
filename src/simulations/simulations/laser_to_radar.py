@@ -24,6 +24,7 @@ from tractor_safety_system_interfaces.msg import RadarDetection
 
 
 class LaserScanToRadar(Node):
+
     def __init__(self):
         super().__init__('laser_to_radar')
         self.declare_parameter('scan_topic', '/sim/lidar')
@@ -98,11 +99,11 @@ class LaserScanToRadar(Node):
         self.prev_dist, self.prev_time = dist, t_now
 
         out = RadarDetection()
-        out.header.stamp = msg.header.stamp
+        out.header.stamp = self.get_clock().now().to_msg()
         out.header.frame_id = self.base_frame
         out.position.x, out.position.y, out.position.z = px, py, pz
-        out.distance = int(round(dist))
-        out.speed = int(round(speed))
+        out.distance = dist
+        out.speed = speed
         self.pub.publish(out)
 
 

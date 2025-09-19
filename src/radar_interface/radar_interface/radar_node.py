@@ -110,8 +110,8 @@ class RadarNode(Node):
             radar_detection_msg.position.x = dist_long
             radar_detection_msg.position.y = dist_lat
             radar_detection_msg.position.z = height
-            radar_detection_msg.speed = int(vrel_long)
-            radar_detection_msg.distance = int((dist_long ** 2 + dist_lat ** 2) ** 0.5)
+            radar_detection_msg.speed = vrel_long
+            radar_detection_msg.distance = (dist_long ** 2 + dist_lat ** 2) ** 0.5
 
             self.publisher_.publish(radar_detection_msg)
             self.get_logger().info(

@@ -29,8 +29,8 @@ class AgOpenSimulator(Node):
     def simulate_control(self):
         """Simulate agopen control commands."""
         command = ControlCommand()
-        command.speed = random.randint(10, 15)
-        command.steering_angle = random.randint(0, 50)
+        command.speed = random.uniform(10.0, 15.0)
+        command.steering_angle = random.uniform(0.0, 50.0)
         self.publisher_.publish(command)
 
 

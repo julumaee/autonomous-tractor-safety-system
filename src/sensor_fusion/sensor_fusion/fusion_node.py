@@ -41,14 +41,14 @@ class FusionNode(Node):
         self.timer = self.create_timer(0.1, self.attempt_fusion)
 
         # Initialize detection deques
-        self.camera_detections = deque(maxlen=20)  # Limit to 20 recent detections
-        self.radar_detections = deque(maxlen=20)   # Limit to 20 recent detections
+        self.camera_detections = deque(maxlen=100)  # Limit to 20 recent detections
+        self.radar_detections = deque(maxlen=100)   # Limit to 20 recent detections
 
         # Declare parameters with default values
         self.declare_parameter('time_threshold', 0.5)         # Default value 0.5 seconds
         self.declare_parameter('distance_threshold', 1.0)     # Default value 1 meter
-        self.declare_parameter('radar_trust_min', 2)          # Default value 2 meters
-        self.declare_parameter('camera_trust_max', 12)        # Default value 12 meters
+        self.declare_parameter('radar_trust_min', 2.0)          # Default value 2 meters
+        self.declare_parameter('camera_trust_max', 12.0)        # Default value 12 meters
         self.declare_parameter('detection_score_trust', 0.5)  # Default value 0.5
         self.declare_parameter('rotation_matrix', [1.0, 0.0, 0.0,
                                                    0.0, 1.0, 0.0,
@@ -238,7 +238,7 @@ class FusionNode(Node):
         )
         distance = np.linalg.norm([modified_camera_detection.position.x,
                                    modified_camera_detection.position.y,])
-        modified_camera_detection.distance = int(distance)
+        modified_camera_detection.distance = distance
         modified_camera_detection.is_tracking = camera_detection.is_tracking
         modified_camera_detection.tracking_id = camera_detection.tracking_id
         modified_camera_detection.detection_type = 'camera'

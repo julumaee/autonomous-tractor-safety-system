@@ -25,14 +25,20 @@ from tractor_safety_system_interfaces.msg import RadarDetection
 
 
 class SimpleLidarToRadar(Node):
+
     def __init__(self):
         super().__init__('simple_lidar_to_radar')
         self.declare_parameter('cloud_topic', '/sim/lidar/points')
         self.declare_parameter('base_frame', 'base_link')
-        self.declare_parameter('y_max', 1.5)       # lateral half-width (m) for “in front”
+        self.declare_parameter('y_max', 10.0)       # lateral half-width (m) for “in front”
         self.declare_parameter('z_min', 0.05)      # ground reject (m)
         self.declare_parameter('z_max', 2.5)       # max height (m)
         self.declare_parameter('distance_mode', 'longitudinal')  # 'euclidean' or 'longitudinal'
+        self.declare_parameter('az_bins', 36)           # how many angular sectors in front
+        self.declare_parameter('fov_left_deg', 75.0)    # left limit (positive Y side)
+        self.declare_parameter('fov_right_deg', 75.0)   # right limit (negative Y side)
+        self.declare_parameter('min_points_bin', 1)     # require N points in a bin
+        self.declare_parameter('max_targets', 16)       # cap how many we publish per cloud
 
         self.cloud_topic = self.get_parameter('cloud_topic').get_parameter_value().string_value
         self.base_frame = self.get_parameter('base_frame').get_parameter_value().string_value
@@ -40,6 +46,11 @@ class SimpleLidarToRadar(Node):
         self.z_min = float(self.get_parameter('z_min').value)
         self.z_max = float(self.get_parameter('z_max').value)
         self.distance_mode = self.get_parameter('distance_mode').get_parameter_value().string_value
+        self.az_bins = int(self.get_parameter('az_bins').value)
+        self.fov_left_rad = math.radians(float(self.get_parameter('fov_left_deg').value))
+        self.fov_right_rad = math.radians(float(self.get_parameter('fov_right_deg').value))
+        self.min_points_bin = int(self.get_parameter('min_points_bin').value)
+        self.max_targets = int(self.get_parameter('max_targets').value)
 
         self.tfbuf = Buffer()
         self.tfl = TransformListener(self.tfbuf, self)
@@ -50,6 +61,8 @@ class SimpleLidarToRadar(Node):
 
         self.prev_dist = None
         self.prev_time = None
+        self.prev_by_bin = {}  # bin_idx -> (dist_m, t_sec)
+
         self.get_logger().info('Simple LiDAR→Radar running.')
 
     def on_cloud(self, msg: PointCloud2):
@@ -67,25 +80,6 @@ class SimpleLidarToRadar(Node):
             self.get_logger().warn(f'TF {msg.header.frame_id}->{self.base_frame} missing: {e}')
             return
 
-        # Convert to Nx3 array and transform
-        pts = np.array([[p[0], p[1], p[2]] for p in pc2.read_points(msg,
-                                                                    field_names=('x', 'y', 'z'),
-                                                                    skip_nans=True)],
-                       dtype=np.float64)
-
-        # 1) Quick sanity on fields
-        field_names = [f.name for f in msg.fields]
-        if not {'x', 'y', 'z'}.issubset(field_names):
-            self.get_logger().warn(
-                f'Cloud missing x/y/z fields: fields={field_names}; '
-                f'w={msg.width}'
-                f'h={msg.height}'
-                f'point_step={msg.point_step}'
-                f'len(data)={len(msg.data)}'
-            )
-            return
-
-        # 2) Use numpy reader; don't drop NaNs here—filter after
         try:
             arr = pc2.read_points_numpy(
                 msg,
@@ -110,9 +104,6 @@ class SimpleLidarToRadar(Node):
 
         # Normalize to (N,3) float64
         pts = np.asarray(arr)
-        if pts.ndim == 1:
-            pts = pts.reshape((-1, 3))
-
         # If it's a structured array (dtype.names present), rebuild (N,3)
         if getattr(pts, 'dtype', None) is not None and pts.dtype.names is not None:
             try:
@@ -120,7 +111,8 @@ class SimpleLidarToRadar(Node):
             except Exception as e:
                 self.get_logger().warn(f'Failed to unpack structured array: {e}')
                 return
-
+        if pts.ndim == 1:
+            pts = pts.reshape((-1, 3))
         pts = pts.astype(np.float64, copy=False)
 
         # 3) Filter non-finite / zeros if your GPU lidar uses inf/NaN for no-returns
@@ -148,39 +140,77 @@ class SimpleLidarToRadar(Node):
                       tf.transform.translation.z], dtype=np.float64)
         pts_bl = (R @ pts.T).T + t
 
-        # Keep points in front of the tractor (x>0), within lateral & height gates
-        m = (pts_bl[:, 0] > 0.0) & (np.abs(pts_bl[:, 1]) <= self.y_max) \
-            & (pts_bl[:, 2] >= self.z_min) & (pts_bl[:, 2] <= self.z_max)
-        cand = pts_bl[m]
-        if cand.shape[0] == 0:
+        # Forward frustum & height/lateral gates
+        x = pts_bl[:, 0]
+        y = pts_bl[:, 1]
+        z = pts_bl[:, 2]
+        m = (x > 0.0) & (np.abs(y) <= self.y_max) & (z >= self.z_min) & (z <= self.z_max)
+        if not np.any(m):
             return
+        x = x[m]
+        y = y[m]
+        z = z[m]
 
-        # Choose the nearest forward point
+        # Azimuth and FOV gate (front sector only)
+        az = np.arctan2(y, x)  # [-pi, pi]
+        m_fov = (az <= self.fov_left_rad) & (az >= -self.fov_right_rad)
+        if not np.any(m_fov):
+            return
+        x = x[m_fov]
+        y = y[m_fov]
+        z = z[m_fov]
+        az = az[m_fov]
+        # Choose distance per-point
         if self.distance_mode == 'longitudinal':
-            idx = np.argmin(cand[:, 0])  # smallest x
-            distance_m = float(max(0.0, cand[idx, 0]))
+            d = x  # longitudinal distance
         else:
-            dists = np.linalg.norm(cand, axis=1)  # euclidean
-            idx = int(np.argmin(dists))
-            distance_m = float(dists[idx])
+            d = np.sqrt(x*x + y*y + z*z)  # euclidean
 
-        pos = cand[idx]  # x,y,z in base_link
+        # Bin edges across the kept FOV
+        left = self.fov_left_rad
+        right = -self.fov_right_rad
+        # ensure left >= right numerically
+        span = float(left - right)
+        # map az in [right, left] to [0, az_bins)
+        bin_w = span / float(self.az_bins)
+        bin_idx = np.clip(((az - right) / bin_w).astype(np.int32), 0, self.az_bins - 1)
 
-        # Speed estimate = radial closing speed (positive when approaching)
+        # For each bin, select nearest point
+        detections = []
+        for bi in range(self.az_bins):
+            idxs = np.where(bin_idx == bi)[0]
+            if idxs.size < self.min_points_bin:
+                continue
+            # pick nearest by chosen metric d
+            j = idxs[np.argmin(d[idxs])]
+            detections.append((bi, x[j], y[j], z[j], d[j]))
+
+        # Keep nearest N overall (optional)
+        detections.sort(key=lambda it: it[4])
+        if len(detections) > self.max_targets:
+            detections = detections[:self.max_targets]
+
+        # Publish one message per detection
         t_now = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        speed_mps = 0.0
-        if self.prev_dist is not None and self.prev_time is not None:
-            dt = max(1e-3, t_now - self.prev_time)
-            speed_mps = (self.prev_dist - distance_m) / dt  # + if getting closer
-        self.prev_dist, self.prev_time = distance_m, t_now
+        for bi, xb, yb, zb, dist in detections:
+            # simple per-bin speed estimate (closing speed)
+            prev = self.prev_by_bin.get(bi)
+            speed_mps = 0.0
+            if prev is not None:
+                pd, pt = prev
+                dt = max(1e-3, t_now - pt)
+                speed_mps = (pd - float(dist)) / dt  # + if getting closer
+            self.prev_by_bin[bi] = (float(dist), t_now)
 
-        out = RadarDetection()
-        out.header.stamp = msg.header.stamp
-        out.header.frame_id = self.base_frame
-        out.position.x, out.position.y, out.position.z = map(float, pos)
-        out.distance = int(round(distance_m))  # meters (integer)
-        out.speed = int(round(speed_mps))  # m/s (integer)
-        self.pub.publish(out)
+            out = RadarDetection()
+            out.header.stamp = self.get_clock().now().to_msg()
+            out.header.frame_id = self.base_frame
+            out.position.x = float(xb)
+            out.position.y = float(yb)
+            out.position.z = float(zb)
+            out.distance = float(dist)          # meters
+            out.speed = float(speed_mps)        # m/s
+            self.pub.publish(out)
 
 
 def main():

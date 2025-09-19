@@ -4,5 +4,5 @@
 std_msgs/Header header
 geometry_msgs/Point position
 
-int32 distance  # Distance in meters
-int32 speed     # Speed in meters per second
+float32 distance  # Distance in meters
+float32 speed     # Speed in meters per second

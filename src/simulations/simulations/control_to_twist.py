@@ -69,9 +69,9 @@ class ControlToVehicle(Node):
             self.get_logger().info(f'Control → Ackermann on {self.ack_out}')
 
     def cb(self, msg: ControlCommand):
-        # ints → SI
-        v = float(msg.speed) / self.k_v               # m/s
-        δ = float(msg.steering_angle) / self.k_delta  # rad
+        # Scale speed and steering angle if needed
+        v = msg.speed / self.k_v               # m/s
+        δ = msg.steering_angle / self.k_delta  # rad
 
         if self.iface == 'twist':
             # bicycle: w = v * tan(δ) / L
