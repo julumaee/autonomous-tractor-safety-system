@@ -141,7 +141,7 @@
       <sensor name="front_lidar" type="gpu_lidar">
         <always_on>true</always_on>
         <visualize>true</visualize>
-        <update_rate>10</update_rate>
+        <update_rate>20</update_rate>
         <topic>/sim/lidar</topic>
         <pose>0 0 0 0 0 0</pose>
         <lidar>
@@ -179,7 +179,7 @@
           <image><width>640</width><height>480</height><format>R8G8B8</format></image>
           <clip><near>0.05</near><far>50</far></clip>
         </camera>
-        <update_rate>10</update_rate>
+        <update_rate>20</update_rate>
         <always_on>true</always_on>
       </sensor>
 
@@ -194,7 +194,7 @@
           </image>
           <clip><near>0.05</near><far>50</far></clip>
         </camera>
-        <update_rate>10</update_rate>
+        <update_rate>20</update_rate>
         <always_on>true</always_on>
       </sensor>
     </link>

@@ -1,7 +1,6 @@
 # This is a message type defined for fused detections.
 # Detections published from the fusion node should be
-# of this type. Currently only the field distance is
-# used, but other fields may be used in the future.
+# of this type.
 
 std_msgs/Header header
 vision_msgs/ObjectHypothesis[] results  # Class probabilities
@@ -20,5 +19,5 @@ string tracking_id
 
 # Type of detection. Used to differentiate
 # between fused, radar, and camera detections.
-# Valid values are "fused", "radar", and "camera".
+# Valid values are "fused", "radar", "camera" and "tracked".
 string detection_type

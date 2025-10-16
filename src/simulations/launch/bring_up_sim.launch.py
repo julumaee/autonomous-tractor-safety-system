@@ -24,7 +24,7 @@ def generate_launch_description():
     # Common args
     # --------------------
     use_sim_time = DeclareLaunchArgument('use_sim_time',
-                                         default_value='true')
+                                         default_value='True')
     base_frame = DeclareLaunchArgument('base_frame',
                                        default_value='base_link')
 
@@ -102,7 +102,7 @@ def generate_launch_description():
             TextSubstitution(text='@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan')],
 
         # clock (no LaunchConfiguration here)
-        TextSubstitution(text='/clock@rosgraph_msgs/msg/Clock@gz.msgs.Clock'),
+        TextSubstitution(text='/world/simple_field/clock@rosgraph_msgs/msg/Clock@gz.msgs.Clock'),
     ]
 
     bridge_node = Node(
@@ -110,6 +110,9 @@ def generate_launch_description():
         executable='parameter_bridge',
         name='gz_bridge',
         output='screen',
+        remappings=[
+            ('/world/simple_field/clock', '/clock'),
+        ],
         arguments=bridge_args
     )
 
@@ -167,6 +170,7 @@ def generate_launch_description():
             'info_topic':        LaunchConfiguration('camera_info_topic'),
             'out_topic':         LaunchConfiguration('spatial_out_topic'),
             'sample_fraction':   0.2,
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
         }]
     )
 
@@ -179,6 +183,7 @@ def generate_launch_description():
         parameters=[{
             'cloud_topic':  LaunchConfiguration('lidar_points_topic'),
             'base_frame':   LaunchConfiguration('base_frame'),
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
         }]
     )
 

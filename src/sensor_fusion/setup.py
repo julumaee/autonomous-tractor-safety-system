@@ -34,7 +34,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'fusion_node = sensor_fusion.fusion_node:main'
+            'fusion_node = sensor_fusion.fusion_node:main',
+            'kf_tracker = sensor_fusion.kf_tracker:main',
         ],
     },
 )

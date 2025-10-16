@@ -73,8 +73,7 @@ class TestFusionNode(unittest.TestCase):
         """Create a CameraDetection message."""
         msg = CameraDetection()
         msg.header = Header()
-        msg.header.stamp.sec = 1  # Simulated timestamp
-        msg.header.stamp.nanosec = 0
+        msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
         msg.tracking_id = tracking_id
         return msg
@@ -83,8 +82,7 @@ class TestFusionNode(unittest.TestCase):
         """Create a RadarDetection message."""
         msg = RadarDetection()
         msg.header = Header()
-        msg.header.stamp.sec = 1
-        msg.header.stamp.nanosec = 0
+        msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
         msg.distance = distance
         msg.speed = speed
@@ -93,13 +91,11 @@ class TestFusionNode(unittest.TestCase):
 
     def test_fusion_performs_correctly(self):
         """Ensure that radar and camera detections are correctly fused and published."""
-        camera_msg = self.create_camera_detection(-3.0, 0.0, 12.0)
+        camera_msg = self.create_camera_detection(12.0, 3.0, 0.0)
         radar_msg = self.create_radar_detection(12.1, 3.1, 0.0, distance=11, speed=2)
 
         # Override parameters for testing
         self.fusion_node.time_threshold = 0.5
-        self.fusion_node.distance_threshold = 1.0
-        self.fusion_node.radar_trust_min = 4.0
         self.fusion_node.camera_trust_max = 12.0
         self.fusion_node.R = np.eye(3)  # Identity matrix (no rotation)
         self.fusion_node.T = np.zeros(3)  # No translation

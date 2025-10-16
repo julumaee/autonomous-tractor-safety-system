@@ -1,5 +1,7 @@
 fusion_node:
   ros__parameters:
+    # Use simulation time
+    use_sim_time: True
     # Time threshold for detection matching
     time_threshold: 0.5  # seconds
 
@@ -22,7 +24,9 @@ fusion_node:
 
 safety_monitor:
   ros__parameters:
-  
+    # Use simulation time
+    use_sim_time: True
+
     # Safety distances for target proximity
     safety_distance_1: 40.0  # meters
     safety_distance_2: 10.0  # meters
@@ -36,6 +40,16 @@ safety_monitor:
     # Time reset values
     detection_active_reset_time: 5.0 # If nothing is detected for this time period, speed state is transitioned one step
     vehicle_stopped_reset_time: 5.0 # If no detections are inside stop distance for this time period, speed control is given to AgOpen
+
+camera_node:
+  ros__parameters:
+    # Use simulation time
+    use_sim_time: True
+
+kf_tracker:
+  ros__parameters:
+    # Use simulation time
+    use_sim_time: True
 
 radar_node:
   ros__parameters:

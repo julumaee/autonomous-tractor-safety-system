@@ -181,7 +181,7 @@ class SafetyMonitor(Node):
             self.publisher_.publish(control_cmd)
         elif self.vehicle_state == 'stopped':
             # Publish only reverse commands, when in stop state
-            if self.agopen_speed < 0.0:
+            if self.agopen_speed <= 0.0:
                 control_cmd.speed = self.agopen_speed
                 self.publisher_.publish(control_cmd)
                 self.get_logger().info('Vehicle in state "stopped", '

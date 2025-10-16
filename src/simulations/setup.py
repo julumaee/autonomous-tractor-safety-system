@@ -55,7 +55,8 @@ setup(
             'lidar_to_radar = simulations.lidar_to_radar:main',
             'camera_to_camera = simulations.camera_to_camera:main',
             'spatial_from_yolo = simulations.spatial_from_yolo:main',
-            'laser_to_radar = simulations.laser_to_radar:main'
+            'laser_to_radar = simulations.laser_to_radar:main',
+            'visualize_tracks = simulations.visualize_tracks:main'
         ],
     },
 )

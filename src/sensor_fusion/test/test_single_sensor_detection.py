@@ -35,6 +35,7 @@
 #                                                                                            #
 ##############################################################################################
 
+import time
 import unittest
 
 from geometry_msgs.msg import Point
@@ -75,8 +76,7 @@ class TestSingleSensorDetection(unittest.TestCase):
         """Create a CameraDetection message."""
         msg = CameraDetection()
         msg.header = Header()
-        msg.header.stamp.sec = 1  # Simulated timestamp
-        msg.header.stamp.nanosec = 0
+        msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
         msg.tracking_id = tracking_id
         msg.results = []
@@ -87,10 +87,9 @@ class TestSingleSensorDetection(unittest.TestCase):
         """Create a RadarDetection message."""
         msg = RadarDetection()
         msg.header = Header()
-        msg.header.stamp.sec = 1
-        msg.header.stamp.nanosec = 0
+        msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
-        msg.distance = (x**2 + y**2)/0.5
+        msg.distance = (x**2 + y**2)**0.5
         msg.speed = speed
         msg.header.frame_id = frame_id
         return msg
@@ -105,31 +104,20 @@ class TestSingleSensorDetection(unittest.TestCase):
 
         # Create a camera detection not passing the trust threshold
         hypothesis2 = ObjectHypothesis(class_id='person', score=0.4)
-        camera_msg_untrusted = self.create_camera_detection(3.0, 3.0, 0.0, hypothesis2)
-
-        # Create a radar detection not passing the trust threshold
-        radar_msg_untrusted = self.create_radar_detection(1.0, 0.0, 0.0, speed=2)
+        camera_msg_untrusted = self.create_camera_detection(15.0, 3.0, 0.0, hypothesis2)
 
         # Override parameters for testing
-        self.fusion_node.time_threshold = 0.5
-        self.fusion_node.distance_threshold = 1.0
-        self.fusion_node.radar_trust_min = 4.0
+        self.fusion_node.time_threshold = 0.1
         self.fusion_node.camera_trust_max = 12.0
-        self.fusion_node.detection_score_trust = 0.6
         self.fusion_node.R = np.eye(3)  # Identity matrix (no rotation)
         self.fusion_node.T = np.zeros(3)  # No translation
 
         # Test with untrusted detections:
 
-        # Add radar detection to the fusion node
-        self.fusion_node.radar_detections.append(radar_msg_untrusted)
-
-        # Attempt fusion
-        self.fusion_node.attempt_fusion()
-
         # Add camera detection to the fusion node
         self.fusion_node.camera_detections.append(camera_msg_untrusted)
-
+        # Wait for a little while to publish
+        time.sleep(0.15)
         # Attempt fusion
         self.fusion_node.attempt_fusion()
 
@@ -139,14 +127,24 @@ class TestSingleSensorDetection(unittest.TestCase):
 
         # Test with trusted detections:
 
+        # Update timestamps to ensure they are recent
+        radar_msg_trusted.header.stamp = self.fusion_node.get_clock().now().to_msg()
+        camera_msg_trusted.header.stamp = self.fusion_node.get_clock().now().to_msg()
+
         # Add radar detection to the fusion node
         self.fusion_node.radar_detections.append(radar_msg_trusted)
+
+        # Wait for a little while to publish
+        time.sleep(0.15)
 
         # Attempt fusion
         self.fusion_node.attempt_fusion()
 
         # Add camera detection to the fusion node
         self.fusion_node.camera_detections.append(camera_msg_trusted)
+
+        # Wait for a little while to publish
+        time.sleep(0.15)
 
         # Attempt fusion
         self.fusion_node.attempt_fusion()
@@ -180,11 +178,11 @@ class TestSingleSensorDetection(unittest.TestCase):
         self.assertEqual(camera_detection.detection_type, 'camera',
                          msg='Sent camera detection should be of type camera')
         self.assertAlmostEqual(camera_detection.position.x,
-                               camera_msg_trusted.position.z,
+                               camera_msg_trusted.position.x,
                                places=2,
-                               msg='Position X should match camera transferred to radar')
+                               msg='Position X should match camera')
         self.assertAlmostEqual(camera_detection.position.y,
-                               -camera_msg_trusted.position.x,
+                               camera_msg_trusted.position.y,
                                places=2,
                                msg='Position Y should match camera')
 

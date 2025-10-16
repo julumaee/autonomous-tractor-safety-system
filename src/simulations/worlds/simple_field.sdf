@@ -1,6 +1,6 @@
 <?xml version="1.8" ?>
 <sdf version="1.10">
-  <world name="test_field">
+  <world name="simple_field">
     <gravity>0 0 -9.81</gravity>
     <physics name="default" type="ignored"/>
     <scene><ambient>0.4 0.4 0.4 1</ambient><background>0.9 0.9 0.95 1</background></scene>
@@ -12,29 +12,41 @@
 
     <!-- Some obstacles to test safety zones -->
     <include>
+      <uri>https://fuel.gazebosim.org/1.0/NGD1004/models/Walking actor</uri>
+      <name>actor_1</name>
+      <pose>15 -2 1 0 0 -1.5708</pose>
+    </include>
+
+    <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
       <name>person_1</name>
       <pose>20 0 0 0 0 -1.5708</pose>
     </include>
-
+  
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
       <name>person_2</name>
-      <pose>10 5 0 0 0 -1.5708</pose>
+      <pose>17 5 0 0 0 -1.5708</pose>
     </include>
-
+<!--
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
       <name>person_3</name>
-      <pose>15 -5 0 0 0 -1.5708</pose>
+      <pose>10 2 0 0 0 -1.5708</pose>
     </include>
-
+  
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
       <name>person_4</name>
-      <pose>10 -1 0 0 0 -1.5708</pose>
+      <pose>15 -5 0 0 0 -1.5708</pose>
     </include>
-
+  
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_5</name>
+      <pose>10 -2 0 0 0 -1.5708</pose>
+    </include>
+-->
     <!--
     <model name="box_obstacle">
       <pose>5 0 0.5 0 0 0</pose>

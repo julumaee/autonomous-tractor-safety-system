@@ -27,7 +27,7 @@ def generate_launch_description():
     pkg_share = get_package_share_path('simulations')
     default_params = os.path.join(pkg_share, 'config', 'parameters_simulated.yaml')
 
-    # Allow overriding from CLI: params:=/abs/path/to/custom.yaml
+    # Allow overriding from CLI
     params_arg = DeclareLaunchArgument(
         'params',
         default_value=default_params,
@@ -43,6 +43,7 @@ def generate_launch_description():
             package='camera_interface',
             executable='camera_node',
             name='camera_node',
+            parameters=[params],
             output='screen'
         ),
 
@@ -51,6 +52,15 @@ def generate_launch_description():
             package='sensor_fusion',
             executable='fusion_node',
             name='fusion_node',
+            parameters=[params],
+            output='screen'
+        ),
+
+        # Tracker node (Tracks fused detections over time)
+        Node(
+            package='sensor_fusion',
+            executable='kf_tracker',
+            name='kf_tracker',
             parameters=[params],
             output='screen'
         ),
