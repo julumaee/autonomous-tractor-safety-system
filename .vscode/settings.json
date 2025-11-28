@@ -1,3 +1,12 @@
 {
-    "cmake.sourceDirectory": "/home/eemil/tractor_safety_system/src/tractor_safety_system_interfaces"
+    "cmake.sourceDirectory": "/home/eemil/tractor_safety_system/src/tractor_safety_system_interfaces",
+    "python.testing.unittestArgs": [
+        "-v",
+        "-s",
+        "./src",
+        "-p",
+        "test_*.py"
+    ],
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": true
 }

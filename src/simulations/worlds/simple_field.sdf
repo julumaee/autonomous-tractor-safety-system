@@ -10,7 +10,71 @@
       <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/Ground Plane</uri>
     </include>
 
-    <!-- Some obstacles to test safety zones -->
+    <!-- Pedestrians for testing experimental setups S1-S4-->
+
+    <!-- S1: Single person standing at 20 meters-->
+    <!--
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_1</name>
+      <pose>20 0 0 0 0 -1.5708</pose>
+    </include>
+    -->
+    <!-- S2: Three persons around the tractors path-->
+    <!--
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_1</name>
+      <pose>15 5 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_2</name>
+      <pose>20 0 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_3</name>
+      <pose>17 -5 0 0 0 -1.5708</pose>
+    </include>
+    -->
+    <!-- S3: Walking actors crossing the path in opposite directions-->
+    <!--
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/NGD1004/models/Walking actor</uri>
+      <name>actor_1</name>
+      <pose>15 -2 1 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/NGD1004/models/Walking actor</uri>
+      <name>actor_2</name>
+      <pose>15 2 1 0 0 1.5708</pose>
+    </include>  
+    -->
+    <!-- S4: Three persons at 20 meters in a row-->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_1</name>
+      <pose>20 -5 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_2</name>
+      <pose>20 0 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+      <name>person_3</name>
+      <pose>20 5 0 0 0 -1.5708</pose>
+    </include>
+
+    <!-- Other obstacles -->
+    <!--
     <include>
       <uri>https://fuel.gazebosim.org/1.0/NGD1004/models/Walking actor</uri>
       <name>actor_1</name>
@@ -28,7 +92,7 @@
       <name>person_2</name>
       <pose>17 5 0 0 0 -1.5708</pose>
     </include>
-<!--
+
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
       <name>person_3</name>
@@ -46,7 +110,8 @@
       <name>person_5</name>
       <pose>10 -2 0 0 0 -1.5708</pose>
     </include>
--->
+    -->
+
     <!--
     <model name="box_obstacle">
       <pose>5 0 0.5 0 0 0</pose>

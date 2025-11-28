@@ -74,12 +74,10 @@ class TestCameraNode(unittest.TestCase):
         """Destroy the CameraNode after each test."""
         self.camera_node.destroy_node()
 
-    def create_camera_detection(self, x, y, z, tracking_id, object_hypothesis):
+    def create_camera_detection(self, x, y, z, object_hypothesis):
         """Create a CameraDetection message."""
         msg = SpatialDetection()
         msg.position = Point(x=x, y=y, z=z)
-        msg.is_tracking = True
-        msg.tracking_id = f'object_{tracking_id}'
         msg.results = []
         msg.results.append(object_hypothesis)
         return msg
@@ -94,11 +92,11 @@ class TestCameraNode(unittest.TestCase):
 
         # Detection 1:
         object_1 = ObjectHypothesis(class_id='person', score=0.95)
-        detection1 = self.create_camera_detection(3.0, 12.0, 0.0, 1, object_1)
+        detection1 = self.create_camera_detection(3.0, 12.0, 0.0, object_1)
 
         # Detection 2:
         object_2 = ObjectHypothesis(class_id='car', score=0.8)
-        detection2 = self.create_camera_detection(10.0, 5.0, 0.0, 2, object_2)
+        detection2 = self.create_camera_detection(10.0, 5.0, 0.0, object_2)
 
         # Add detections to the array
         detection_array.detections.append(detection1)
@@ -122,14 +120,11 @@ class TestCameraNode(unittest.TestCase):
 
         # Verify the first detection
         self.assertEqual(camera_detection_1.header.frame_id,
-                         'target_' + camera_msg.detections[0].tracking_id,
+                         'camera_link',
                          msg='Detection 1 should have correct ID')
         self.assertEqual(camera_detection_1.results[0].class_id,
                          camera_msg.detections[0].results[0].class_id,
                          msg='Detection 1 results should retain class ID')
-        self.assertEqual(camera_detection_1.tracking_id,
-                         camera_msg.detections[0].tracking_id,
-                         msg='Detection 1 should retain tracking ID')
         self.assertAlmostEqual(camera_detection_1.position.x,
                                camera_msg.detections[0].position.x, places=2,
                                msg='Detection 1 position X should match camera')
@@ -139,14 +134,11 @@ class TestCameraNode(unittest.TestCase):
 
         # Verify the second detection
         self.assertEqual(camera_detection_2.header.frame_id,
-                         'target_' + camera_msg.detections[1].tracking_id,
+                         'camera_link',
                          msg='Detection 2 should have correct ID')
         self.assertEqual(camera_detection_2.results[0].class_id,
                          camera_msg.detections[1].results[0].class_id,
                          msg='Detection 2 results should retain class ID')
-        self.assertEqual(camera_detection_2.tracking_id,
-                         camera_msg.detections[1].tracking_id,
-                         msg='Detection 2 should retain tracking ID')
         self.assertAlmostEqual(camera_detection_2.position.x,
                                camera_msg.detections[1].position.x, places=2,
                                msg='Detection 2 position X should match camera')

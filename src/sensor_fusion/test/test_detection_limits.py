@@ -69,17 +69,16 @@ class TestDetectionLimits(unittest.TestCase):
 
         self.fusion_node.publisher_.publish = mock_publisher
 
-    def create_camera_detection(self, x, y, z, tracking_id='test_camera'):
+    def create_camera_detection(self, x, y, z):
         """Create a CameraDetection message."""
         msg = CameraDetection()
         msg.header = Header()
         msg.header.stamp.sec = 1  # Simulated timestamp
         msg.header.stamp.nanosec = 0
         msg.position = Point(x=x, y=y, z=z)
-        msg.tracking_id = tracking_id
         return msg
 
-    def create_radar_detection(self, x, y, z, distance, speed, frame_id='test_radar'):
+    def create_radar_detection(self, x, y, z, distance, speed):
         """Create a RadarDetection message."""
         msg = RadarDetection()
         msg.header = Header()
@@ -88,7 +87,6 @@ class TestDetectionLimits(unittest.TestCase):
         msg.position = Point(x=x, y=y, z=z)
         msg.distance = distance
         msg.speed = speed
-        msg.header.frame_id = frame_id
         return msg
 
     def test_untrusted_detections_handling(self):

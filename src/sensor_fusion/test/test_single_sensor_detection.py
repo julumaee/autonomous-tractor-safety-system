@@ -72,18 +72,17 @@ class TestSingleSensorDetection(unittest.TestCase):
 
         self.fusion_node.publisher_.publish = mock_publisher
 
-    def create_camera_detection(self, x, y, z, hypothesis, tracking_id='test_camera'):
+    def create_camera_detection(self, x, y, z, hypothesis):
         """Create a CameraDetection message."""
         msg = CameraDetection()
         msg.header = Header()
         msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
-        msg.tracking_id = tracking_id
         msg.results = []
         msg.results.append(hypothesis)
         return msg
 
-    def create_radar_detection(self, x, y, z, speed, frame_id='test_radar'):
+    def create_radar_detection(self, x, y, z, speed):
         """Create a RadarDetection message."""
         msg = RadarDetection()
         msg.header = Header()
@@ -91,7 +90,6 @@ class TestSingleSensorDetection(unittest.TestCase):
         msg.position = Point(x=x, y=y, z=z)
         msg.distance = (x**2 + y**2)**0.5
         msg.speed = speed
-        msg.header.frame_id = frame_id
         return msg
 
     def test_single_detection_handling(self):

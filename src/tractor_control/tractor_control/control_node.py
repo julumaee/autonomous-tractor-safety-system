@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from geometry_msgs.msg import TwistWithCovarianceStamped as TWCS
 import rclpy
 from rclpy.node import Node
 from tractor_safety_system_interfaces.msg import ControlCommand
@@ -26,6 +27,7 @@ class TractorControl(Node):
             '/control',
             self.control_tractor,
             10)
+        self.pub = self.create_publisher(TWCS, '/ego_motion', 50)
 
     def control_tractor(self, control_command):
         """Control the tractor based on the received command."""

@@ -104,7 +104,7 @@ class RadarNode(Node):
             # Publish message
             radar_detection_msg = RadarDetection()
             radar_detection_msg.header = Header()
-            radar_detection_msg.header.frame_id = f'target_{target_id}'
+            radar_detection_msg.header.frame_id = 'radar_link'
             radar_detection_msg.header.stamp = self.get_clock().now().to_msg()
 
             radar_detection_msg.position.x = dist_long

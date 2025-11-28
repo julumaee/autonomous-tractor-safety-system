@@ -17,6 +17,7 @@ import os
 from ament_index_python.packages import get_package_share_path
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, Shutdown
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -33,7 +34,15 @@ def generate_launch_description():
         default_value=default_params,
         description='Path to parameters YAML for safety_monitor'
     )
+
+    start_safety_monitor_arg = DeclareLaunchArgument(
+        'start_safety_monitor',
+        default_value='true',
+        description='Whether to start the safety monitor node'
+    )
+
     params = LaunchConfiguration('params')
+    start_safety_monitor = LaunchConfiguration('start_safety_monitor')
 
     # List of all nodes to launch
     nodes = [
@@ -71,6 +80,7 @@ def generate_launch_description():
             executable='safety_monitor',
             name='safety_monitor',
             parameters=[params],
+            condition=IfCondition(start_safety_monitor),
             output='screen'
         )
     ]
@@ -88,10 +98,9 @@ def generate_launch_description():
 
     return LaunchDescription([
         params_arg,
-        # Log message to indicate test start
+        start_safety_monitor_arg,
         LogInfo(msg='Launching all nodes...'),
         *nodes,
         *shutdown_handlers,
-        # Log message to indicate test setup completion
         LogInfo(msg='All nodes launched successfully.'),
     ])

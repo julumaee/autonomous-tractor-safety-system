@@ -69,16 +69,15 @@ class TestFusionNode(unittest.TestCase):
 
         self.fusion_node.publisher_.publish = mock_publisher
 
-    def create_camera_detection(self, x, y, z, tracking_id='test_camera'):
+    def create_camera_detection(self, x, y, z):
         """Create a CameraDetection message."""
         msg = CameraDetection()
         msg.header = Header()
         msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
-        msg.tracking_id = tracking_id
         return msg
 
-    def create_radar_detection(self, x, y, z, distance, speed, frame_id='test_radar'):
+    def create_radar_detection(self, x, y, z, distance, speed):
         """Create a RadarDetection message."""
         msg = RadarDetection()
         msg.header = Header()
@@ -86,7 +85,6 @@ class TestFusionNode(unittest.TestCase):
         msg.position = Point(x=x, y=y, z=z)
         msg.distance = distance
         msg.speed = speed
-        msg.header.frame_id = frame_id
         return msg
 
     def test_fusion_performs_correctly(self):
@@ -116,8 +114,6 @@ class TestFusionNode(unittest.TestCase):
 
         self.assertEqual(fused_detection.detection_type, 'fused',
                          msg='Detection type should be fused')
-        self.assertEqual(fused_detection.tracking_id, camera_msg.tracking_id,
-                         msg='Fused detection should retain camera tracking ID')
         self.assertAlmostEqual(fused_detection.position.x, radar_msg.position.x, places=2,
                                msg='Fused position X should match radar')
         self.assertAlmostEqual(fused_detection.position.y, radar_msg.position.y, places=2,

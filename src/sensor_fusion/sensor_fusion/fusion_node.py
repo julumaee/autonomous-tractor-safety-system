@@ -43,7 +43,7 @@ class FusionNode(Node):
         # Initialize detection deques
         self.camera_detections = deque(maxlen=200)  # Limit to 200 recent detections
         self.radar_detections = deque(maxlen=200)   # Limit to 200 recent detections
-        self.targets_to_publish = []
+        self.targets_to_pub = []
 
         # Declare parameters with default values
         # --- Threshold values ---
@@ -52,6 +52,7 @@ class FusionNode(Node):
         self.declare_parameter('chi2_threshold', 5.99)       # 95% in 2D
         self.declare_parameter('max_buffer_age', 0.75)       # s, drop stale messages
         self.declare_parameter('near_immediate_range', 3.0)  # immediate publish distance
+        self.declare_parameter('selection_radius', 0.5)      # m, for suppression of targets
         # --- Transformation parameters from camera to radar coordinates ---
         self.declare_parameter('rotation_matrix', [1.0, 0.0, 0.0,
                                                    0.0, 1.0, 0.0,
@@ -62,8 +63,7 @@ class FusionNode(Node):
         self.declare_parameter('cam_range_a', 0.05)            # sigma_r = a*r^2 + b
         self.declare_parameter('cam_range_b', 0.20)
         self.declare_parameter('cam_far_sigma_cap', 30.0)      # cap (m) for far range
-        self.declare_parameter('radar_range_base', 0.3)        # m
-        self.declare_parameter('radar_range_slope', 0.01)      # m per meter
+        self.declare_parameter('radar_range', 0.3)             # radar rng error (m)
         self.declare_parameter('radar_beamwidth_deg', 2.0)     # deg (≈ azimuth std)
 
         # Retrieve parameter values
@@ -72,6 +72,7 @@ class FusionNode(Node):
         self.chi2_threshold = self.get_parameter('chi2_threshold').value
         self.max_buffer_age = self.get_parameter('max_buffer_age').value
         self.near_immediate_range = self.get_parameter('near_immediate_range').value
+        self.selection_radius = self.get_parameter('selection_radius').value
         rotation_matrix_param = self.get_parameter('rotation_matrix').value
         translation_vector_param = self.get_parameter('translation_vector').value
         self.R = np.array(rotation_matrix_param).reshape(3, 3)
@@ -80,8 +81,7 @@ class FusionNode(Node):
         self.cam_range_a = self.get_parameter('cam_range_a').value
         self.cam_range_b = self.get_parameter('cam_range_b').value
         self.cam_far_sigma_cap = self.get_parameter('cam_far_sigma_cap').value
-        self.radar_range_base = self.get_parameter('radar_range_base').value
-        self.radar_range_slope = self.get_parameter('radar_range_slope').value
+        self.radar_range_base = self.get_parameter('radar_range').value
         self.radar_beamwidth_deg = self.get_parameter('radar_beamwidth_deg').value
 
         # Subscribe to parameter updates
@@ -100,6 +100,8 @@ class FusionNode(Node):
                 self.max_buffer_age = param.value
             elif param.name == 'near_immediate_range':
                 self.near_immediate_range = param.value
+            elif param.name == 'selection_radius':
+                self.selection_radius = param.value
             elif param.name == 'rotation_matrix':
                 rotation_matrix_param = param.value
                 self.R = np.array(rotation_matrix_param).reshape(3, 3)
@@ -115,9 +117,7 @@ class FusionNode(Node):
             elif param.name == 'cam_far_sigma_cap':
                 self.cam_far_sigma_cap = param.value
             elif param.name == 'radar_range_base':
-                self.radar_range_base = param.value
-            elif param.name == 'radar_range_slope':
-                self.radar_range_slope = param.value
+                self.radar_range = param.value
             elif param.name == 'radar_beamwidth_deg':
                 self.radar_beamwidth_deg = param.value
         return SetParametersResult(successful=True)
@@ -135,15 +135,15 @@ class FusionNode(Node):
         detection_time = self.get_detection_time(radar_detection)
         if self.verify_detection(radar_detection, 'radar'):
             if self.should_publish_immediately('radar', radar_detection):
-                self.publish_radar_detection(radar_detection)
+                self.create_radar_detection(radar_detection)
                 self.radar_detections.remove(radar_detection)
             elif self.is_partner_expected('radar', radar_detection):
                 # Publish single detection if no partner is found within time threshold
                 if current_time - detection_time >= self.time_threshold:
-                    self.publish_radar_detection(radar_detection)
+                    self.create_radar_detection(radar_detection)
                     self.radar_detections.remove(radar_detection)
             else:
-                self.publish_radar_detection(radar_detection)
+                self.create_radar_detection(radar_detection)
                 self.radar_detections.remove(radar_detection)
 
     def process_camera_detection_without_fusion(self, camera_detection):
@@ -152,15 +152,15 @@ class FusionNode(Node):
         detection_time = self.get_detection_time(camera_detection)
         if self.verify_detection(camera_detection, 'camera'):
             if self.should_publish_immediately('camera', camera_detection):
-                self.publish_camera_detection(camera_detection)
+                self.create_camera_detection(camera_detection)
                 self.camera_detections.remove(camera_detection)
             elif self.is_partner_expected('camera', camera_detection):
                 # Publish single detection if no partner is found within time threshold
                 if current_time - detection_time >= self.time_threshold:
-                    self.publish_camera_detection(camera_detection)
+                    self.create_camera_detection(camera_detection)
                     self.camera_detections.remove(camera_detection)
             else:
-                self.publish_camera_detection(camera_detection)
+                self.create_camera_detection(camera_detection)
                 self.camera_detections.remove(camera_detection)
 
     def transform_camera_to_radar(self, camera_point):
@@ -233,18 +233,17 @@ class FusionNode(Node):
             sigma_r = min(sigma_r, float(self.cam_far_sigma_cap))
         return self.polar_to_cart_cov(r, theta, sigma_r, sigma_theta)
 
-    def radar_cov_xy(self, rad_pt_in_radar_frame: Point, reported_distance: float):
+    def radar_cov_xy(self, rad_pt: Point, distance: float):
         """
         Generate radar covariance.
 
-        - solid range accuracy degrading mildly with distance,
+        - solid range accuracy,
         - moderate beamwidth (~2 deg) as bearing std.
         """
-        x, y = float(rad_pt_in_radar_frame.x), float(rad_pt_in_radar_frame.y)
-        r_geom = float(np.hypot(x, y))
-        r = float(reported_distance) if reported_distance > 0.0 else r_geom
+        x, y = float(rad_pt.x), float(rad_pt.y)
+        r = float(distance)
         theta = float(np.arctan2(y, x))
-        sigma_r = float(self.radar_range_base) + float(self.radar_range_slope) * r
+        sigma_r = float(self.radar_range_base)
         sigma_theta = np.deg2rad(float(self.radar_beamwidth_deg))
         return self.polar_to_cart_cov(r, theta, sigma_r, sigma_theta)
 
@@ -254,7 +253,7 @@ class FusionNode(Node):
 
         Return D^2 if in gate, else -1.
         """
-        # Innovation vector in XY (radar frame)
+        # Measurement residual in XY (radar frame)
         d = np.array([camera_detection.position.x - radar_detection.position.x,
                       camera_detection.position.y - radar_detection.position.y], dtype=float)
 
@@ -262,7 +261,7 @@ class FusionNode(Node):
         Rc = self.camera_cov_xy(camera_detection.position)
         Rr = self.radar_cov_xy(radar_detection.position, radar_detection.distance)
 
-        # Innovation covariance with independent sensor covariances
+        # Residual covariance with independent sensor covariances
         S = Rc + Rr
 
         # Mahalanobis D^2 = d^T S^{-1} d
@@ -275,9 +274,6 @@ class FusionNode(Node):
 
         # Gate with chi-square threshold
         if D2 < self.chi2_threshold:
-            # self.get_logger().info(f'D2={D2:.3f}'
-            #                       f'|d|={np.linalg.norm(d):.3f} '
-            #                       f'log|S|={np.linalg.slogdet(S)[1]:.3f}')
             return D2
         return -1.0  # No match found
 
@@ -328,7 +324,7 @@ class FusionNode(Node):
                     continue
                 cam_msg = self.camera_detections[cam_idx]
                 rad_msg = self.radar_detections[rad_idx]
-                self.publish_fused_detection(cam_msg, rad_msg)
+                self.create_fused_detection(cam_msg, rad_msg)
                 used_cam.add(cam_idx)
                 used_rad.add(rad_idx)
 
@@ -344,12 +340,12 @@ class FusionNode(Node):
             for radar_detection in list(self.radar_detections):
                 self.process_radar_detection_without_fusion(radar_detection)
 
-        self.targets_to_publish = self.select_targets(self.targets_to_publish, radius=1.0)
-        for target in self.targets_to_publish:
+        self.targets_to_pub = self.select_targets(self.targets_to_pub, self.selection_radius)
+        for target in self.targets_to_pub:
             self.publisher_.publish(target)
-        self.targets_to_publish = []
+        self.targets_to_pub = []
 
-    def select_targets(self, detections, radius=1.0):
+    def select_targets(self, detections, radius=0.5):
         """
         Select the best detection for each target.
 
@@ -429,60 +425,65 @@ class FusionNode(Node):
             return True
         return False
 
-    def publish_radar_detection(self, radar_detection):
+    def fuse_xy_wls(self, cam_det, rad_det):
+        """Weighted LS fusion of 2D XY in radar/base frame."""
+        xc = np.array([float(cam_det.position.x), float(cam_det.position.y)], dtype=float)
+        xr = np.array([float(rad_det.position.x), float(rad_det.position.y)], dtype=float)
+        Rc = self.camera_cov_xy(cam_det.position)
+        Rr = self.radar_cov_xy(rad_det.position, rad_det.distance)
+
+        # information form
+        Wc = np.linalg.pinv(Rc)
+        Wr = np.linalg.pinv(Rr)
+        P = np.linalg.pinv(Wc + Wr)
+        x = P @ (Wc @ xc + Wr @ xr)
+        return x
+
+    def create_radar_detection(self, radar_detection):
         """Publish radar detection as a single sensor detection."""
         modified_radar_detection = FusedDetection()
-        modified_radar_detection.header = radar_detection.header
+        modified_radar_detection.header.stamp = radar_detection.header.stamp
+        modified_radar_detection.header.frame_id = 'base_link'
         modified_radar_detection.distance = radar_detection.distance
         modified_radar_detection.speed = radar_detection.speed
         modified_radar_detection.position = radar_detection.position
         modified_radar_detection.detection_type = 'radar'
-        self.targets_to_publish.append(modified_radar_detection)
+        modified_radar_detection.is_tracking = False
+        self.targets_to_pub.append(modified_radar_detection)
 
-        # self.publisher_.publish(modified_radar_detection)
-        # self.get_logger().info('Publishing radar detection at distance: '
-        #                       f'{modified_radar_detection.distance}')
-
-    def publish_camera_detection(self, camera_detection):
+    def create_camera_detection(self, camera_detection):
         """Publish camera detection as a single sensor detection."""
         modified_camera_detection = FusedDetection()
-        modified_camera_detection.header = camera_detection.header
+        modified_camera_detection.header.stamp = camera_detection.header.stamp
+        modified_camera_detection.header.frame_id = 'base_link'
         modified_camera_detection.results = camera_detection.results
         modified_camera_detection.bbox = camera_detection.bbox
         modified_camera_detection.position = camera_detection.position
         distance = np.linalg.norm([camera_detection.position.x,
                                    camera_detection.position.y,])
         modified_camera_detection.distance = distance
-        modified_camera_detection.is_tracking = camera_detection.is_tracking
-        modified_camera_detection.tracking_id = camera_detection.tracking_id
         modified_camera_detection.detection_type = 'camera'
-        self.targets_to_publish.append(modified_camera_detection)
+        modified_camera_detection.is_tracking = False
+        self.targets_to_pub.append(modified_camera_detection)
 
-        # self.publisher_.publish(modified_camera_detection)
-        # self.get_logger().info('Publishing camera detection at distance: '
-        #                       f'{modified_camera_detection.distance}')
-
-    def publish_fused_detection(self, camera_detection, radar_detection):
+    def create_fused_detection(self, camera_detection, radar_detection):
         """Create a FusedDetection message from camera and radar detections."""
         fused_detection = FusedDetection()
-        if camera_detection.header.frame_id != 'untracked_target':
-            fused_detection.header = camera_detection.header
-        else:
-            fused_detection.header = radar_detection.header
+        fused_detection.header.stamp = radar_detection.header.stamp
+        fused_detection.header.frame_id = 'base_link'
         fused_detection.results = camera_detection.results
         fused_detection.bbox = camera_detection.bbox
-        fused_detection.position = radar_detection.position
-        fused_detection.is_tracking = camera_detection.is_tracking
-        fused_detection.tracking_id = camera_detection.tracking_id
-        fused_detection.distance = radar_detection.distance
+        # Fuse position XY using weighted least squares
+        xy = self.fuse_xy_wls(camera_detection, radar_detection)
+        fused_detection.position = Point(x=float(xy[0]),
+                                         y=float(xy[1]),
+                                         z=float(radar_detection.position.z))
+        fused_detection.distance = float(np.hypot(xy[0], xy[1]))
+
         fused_detection.speed = radar_detection.speed
         fused_detection.detection_type = 'fused'
-        self.targets_to_publish.append(fused_detection)
-
-        # self.publisher_.publish(fused_detection)
-        # self.get_logger().info('Publishing fused detection at distance: '
-        #                       f'{fused_detection.distance}.'
-        #                       f'Camera distance:'
+        fused_detection.is_tracking = False
+        self.targets_to_pub.append(fused_detection)
 
 
 def main(args=None):

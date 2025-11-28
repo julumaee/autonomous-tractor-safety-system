@@ -40,14 +40,9 @@ class CameraNode(Node):
             camera_detection_msg.results.append(result)
         camera_detection_msg.bbox = detection.bbox
         camera_detection_msg.position = detection.position
-        camera_detection_msg.is_tracking = detection.is_tracking
-        camera_detection_msg.tracking_id = detection.tracking_id
         camera_detection_msg.header = Header()
         camera_detection_msg.header.stamp = self.get_clock().now().to_msg()
-        if (camera_detection_msg.is_tracking):
-            camera_detection_msg.header.frame_id = 'target_' + detection.tracking_id
-        else:
-            camera_detection_msg.header.frame_id = 'untracked_target'
+        camera_detection_msg.header.frame_id = 'camera_link'
         return camera_detection_msg
 
     def publish_detections(self, oakd_msg):

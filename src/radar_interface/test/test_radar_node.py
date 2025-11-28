@@ -141,7 +141,7 @@ class TestRadarNode(unittest.TestCase):
         # Verify that the detection has expected values
         radar_detection = self.published_detections[0]
 
-        self.assertEqual(radar_detection.header.frame_id, f'target_{frame_id}',
+        self.assertEqual(radar_detection.header.frame_id, 'radar_link',
                          msg='Detection should have correct ID')
         self.assertAlmostEqual(radar_detection.position.x, x, places=2,
                                msg='Fused position X should match radar')

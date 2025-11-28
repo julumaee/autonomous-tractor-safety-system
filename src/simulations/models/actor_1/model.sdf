@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+    <actor name="actor">
+        <skin>
+            <filename>https://fuel.gazebosim.org/1.0/chapulina/models/walking actor/2/files/meshes/walk.dae</filename>
+            <scale>1.0</scale>
+        </skin>
+        <pose>0 0 1 0 0 0</pose>
+        <animation name="walking">
+            <filename>https://fuel.gazebosim.org/1.0/chapulina/models/walking actor/2/files/meshes/walk.dae</filename>
+            <scale>1.000000</scale>
+            <interpolate_x>true</interpolate_x>
+        </animation>
+        <script>
+            <delay_start>0.000000</delay_start>
+            <auto_start>true</auto_start>
+            <trajectory id="0" type="walking">
+                <waypoint>
+                    <time>0.0</time>
+                    <pose>0 0 1 0 0 4.7124</pose>
+                </waypoint>
+                <waypoint>
+                    <time>25.0</time>
+                    <pose>0 -20 1 0 0 4.7124</pose>
+                </waypoint>
+            </trajectory>
+        </script>
+    </actor>
+</sdf>
