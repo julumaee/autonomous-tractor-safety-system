@@ -1,207 +1,385 @@
-# ROS2 project for an autonomous tractor safety system
+# ROS 2 Autonomous Tractor Safety System (Radar + Camera)
 
-![System architecture](system_architecture.png)
+![System architecture](Figures/system_architecture.png)
 
-This repository contains a ROS2 project for an autonomous tractor safety system, which relies on radar and camera sensors for object detection. The aim of this project was to create a "Version 0" grade system, which can be improved and developed in the future. Versions 0, 1 and 2 are explained below.
+ROS 2 packages for a **retrofit** autonomous tractor safety system that uses **automotive radar + camera** to detect and track pedestrians in front of a tractor. The system is designed as a modular perception + safety pipeline, runnable both with real sensors and in Gazebo simulation.
 
-This project is done as part of a Master's Thesis work in the University of Oulu.
+> **Important**  
+> This is a **research prototype**, not a certified safety system.  
+> **Do not** use it as-is for safety-critical operation.
 
-Component       | Version 0     | Version 1     | Version 2     |
-----------------|------------------------------|-------------------------------|--------------------------|
-Camera Node     | Full functionality | Full functionality | Full functionality
-Radar Node      | Full functionality | Full functionality | Full functionality
-Fusion Node     | Perform simple fusion based on detection timestamp and positions. Publish detections from single sensors if not associated with any other sensor detection, and the detection is inside trusted detection limits. | Tracking of the targets added, publish detections from single sensors only if the target is tracked for more than one frame. Simple target recognition using the camera machine vision system. | Utilize filtering to identify false detections more accurately (for example Kalman filtering). Improved object recognition algorithm using radar point-cloud data to verify detections.
-Safety Monitor  | Adjust the tractor speed state, if obstacles are detected in the vision systems sight. | Adjust tractor speed when obstacles are detected in a determined distance from the tractors path, considering also the tractor steering angle and path. | Adjust tractor path if needed according to detected objects.
-Tractor Control | Receives ControlCommands, but doesn't forward them. | Able to control tractor speed through ISOBUS, but steering angle comes straight from AgOpenGPS. | Able to fully control the tractor based on AgOpenGPS and the safety system through ISOBUS.
-AgOpenGPS Node  | Only simulated | Translates AgOpenGPS commands to ROS2 messages, and forwads them to the safety monitor node. | Communicates with AgOpenGPS, being able to adjust the map and assist in the path planning process.
-Simulation and testing | Simple tests to the safety system without integrating to the tractor | Tested in real working environments, integrated into the tractor. | Tested in real working environments, integrated into the tractor.
-All components included | Provides simulated functional safety with speed adjustment. | Provides functional safety with real tractor speed adjustment through ISOBUS. | Machine vision system assists in the control and path planning process providing details of the surroundings, such as obstacles in the real world. The path of the vehicle will be adjusted according to this updated map. Full tractor control through ISOBUS.
+This work was carried out at the **University of Oulu** as part of the **KATI** project.
 
+---
 
-**Note** The safety system uses Nanoradar SR75 4D-radar and OAK-D 2 camera sensors for perception, which are interfaced through the camera_node and radar_node. These sensors can be replaced, but the interfacing nodes must be modified or replaced too. To use the OAK-D 2 camera, depthai-ros driver is used (https://github.com/luxonis/depthai-ros/tree/humble). The camera interface is configured to match running the camera with yoloV4_publisher.launch.py. Camera launch command:
-```console
-ros2 launch depthai_examples yolov4_publisher.launch.py camera_model:=OAK-D spatial_camera:=true
+## What’s inside
+
+High-level pipeline:
+
+- `camera_interface` → camera detections → target list
+- `radar_interface` → radar detections → target list
+- `sensor_fusion` → decision-level fusion + Kalman tracking
+- `safety_monitor` → safety decisions (warning / slow / stop)
+- `tractor_control` → interface to tractor control (sim or real)
+
+---
+
+## Repository structure
+
+Simplified top-level layout:
+
+```text
+repo/
+├── src/
+│   ├── camera_interface/
+│   ├── navigation_interface/
+│   ├── radar_interface/
+│   ├── safety_monitor/
+│   ├── sensor_fusion/
+│   ├── simulations/
+│   ├── tractor_control/
+│   └── tractor_safety_system_interfaces/
+├── analysis_tools/
+└── run_all_simulation_scenarios.sh
 ```
 
-The radar interface is configured to match "track data information" format of the Nanoradar SR75. The radar should be configured correspondingly before connecting to the safety system. The radar is connected to the machine through a CAN-USB adapter. A CAN connection is opened by executing the following commands:
+Package/directories:
 
-```console
+- `src/camera_interface/` – interface from camera/YOLO to target messages
+- `src/radar_interface/` – interface from Nanoradar SR75 (CAN) to target messages
+- `src/sensor_fusion/` – decision-level radar–camera fusion + tracking
+- `src/safety_monitor/` – simple safety logic (distance thresholds, etc.)
+- `src/navigation_interface/` – navigation / path interface (mainly for sim)
+- `src/tractor_control/` – interface to tractor control (real or sim)
+- `src/tractor_safety_system_interfaces/` – shared message definitions
+- `src/simulations/` – Gazebo models, worlds, launch and logging tools
+- `analysis_tools/` – Python scripts to analyse logged data
+- `run_all_simulation_scenarios.sh` – helper script to run all Gazebo scenarios
+
+---
+
+## Prerequisites
+
+Core:
+
+- ROS 2 (tested with **Jazzy**)
+- Gazebo (**Harmonic** or compatible) + `ros_gz` bridge
+- `colcon` + CMake toolchain
+
+Real sensors (optional):
+
+- Luxonis **OAK-D** camera via `depthai-ros`
+- **Nanoradar SR75** 4D radar via CAN (e.g., PEAK USB-CAN)
+
+Simulation perception (required for simulation scenarios):
+
+- **Ultralytics YOLO** tracker node via `ultralytics_ros` (typically from a separate `~/yolo_ws` workspace and its Python venv)
+    - Can be replaced with alternative object detection algorithms
+
+Analysis (optional):
+
+- Python 3 + `numpy`, `pandas`, `matplotlib`
+
+---
+
+## Build
+
+Assuming a standard ROS 2 workspace:
+
+```bash
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws/src
+git clone <this-repo-url>
+cd ..
+colcon build
+source install/setup.bash
+```
+
+> Note: run `source install/setup.bash` in every new terminal before launching nodes.
+
+---
+
+## Sensor interfaces
+
+### Camera (OAK-D / depthai-ros)
+
+The camera interface is configured for `depthai-ros` running a YOLO example (e.g., YOLOv4 publisher):
+
+```bash
+ros2 launch depthai_examples yolov4_publisher.launch.py   camera_model:=OAK-D   spatial_camera:=true
+```
+
+`camera_interface` typically:
+
+- Subscribes to YOLO detection + depth/spatial topics
+- Converts detections into **3D target positions** in the tractor base frame
+- Publishes a list of camera targets for fusion/tracking
+
+If you use another camera/detector, adapt `camera_interface` to match your topics and TF frames.
+
+### Radar (Nanoradar SR75 over CAN)
+
+The radar interface expects SR75 track data over CAN.
+
+Example CAN setup for a PEAK USB device:
+
+```bash
+sudo modprobe peak_usb
+sudo ip link set can0 up type can bitrate 1000000
+
+# verify incoming frames
+candump can0
+```
+
+`radar_interface` typically:
+
+- Reads CAN frames from `can0`
+- Decodes SR75 “track data information” messages
+- Publishes radar target lists in the tractor base frame
+
+To use a different radar, implement a compatible interface node that outputs the same target message type.
+
+---
+
+## Fusion + tracking overview
+
+### Decision-level fusion
+
+`sensor_fusion` performs decision-level fusion:
+
+- Subscribes to targets from radar and camera
+- Uses TF2 to transform detections into the **tractor base frame**
+- Assigns a simple 2D covariance per detection using sensor characteristics  
+  (camera: strong angle, weaker range; radar: strong range, weaker angle)
+
+Per cycle (nominally ~20 Hz):
+
+1. Select detections within a short time window
+2. Form camera–radar candidate pairs close in time
+3. Compute Mahalanobis distance using the sum of covariances
+4. Gate pairs using a chi-square threshold
+5. Fuse matched pairs:
+   - position = covariance-weighted average
+   - keep camera classification + radar speed
+6. Pass through unmatched detections (with filtering so fused detections take priority)
+
+Output: filtered list of fused + single-sensor detections in the tractor frame.
+
+### Tracking with ego-motion compensation
+
+Tracking is a linear Kalman filter with a constant-velocity model.
+
+State (ground plane):
+
+- `[x, y, vx, vy]`
+
+Key points:
+
+- Constant-velocity motion model with white-acceleration process noise (tunable)
+- Ego-motion compensation using odometry/twist (speed + yaw rate)
+- Maintains an approximate tractor pose in a world frame:
+  - detections → world frame for updates
+  - tracks → converted back to tractor base frame for output
+
+This helps static pedestrians remain approximately static in the body frame even when the tractor follows curved paths.
+
+Data association + track management:
+
+- Chi-square gating + greedy nearest-neighbour association
+- New tracks from unmatched detections
+- Track confirmation after a minimum number of hits
+- Track deletion after too many consecutive misses
+
+Published tracks (confirmed only) typically include:
+
+- position, speed, distance
+- unique track ID
+
+---
+
+## Simulation tools
+
+`src/simulations/` contains Gazebo models, worlds, and launch/logging tools:
+
+```text
+src/simulations/
+├── config          # scenario & logging configuration
+├── launch          # launch files (Gazebo + ROS 2)
+├── models          # tractor and pedestrian actors
+├── simulations     # Gazebo helpers & logging tools
+└── worlds          # Gazebo world files (S1–S4)
+```
+
+Scenarios used in associated research:
+
+- **S1** – single static pedestrian ahead of the tractor
+- **S2** – multiple static pedestrians at different positions
+- **S3** – two pedestrians crossing in front of a stationary tractor
+- **S4** – tractor approaching static pedestrians along an S-shaped path
+
+Simulation tools overview (example):
+
+![Simulation example](Figures/simulation_of_safety_system.png)
+
+### Run all scenarios
+
+A helper script can launch all scenarios and log data:
+
+```bash
+cd ~/ros2_ws/src/<this-repo>
+bash run_all_simulation_scenarios.sh
+```
+
+This script is intended to:
+
+- Start the appropriate Gazebo world
+- Launch interfaces, fusion/tracking, and logging nodes
+- Run each scenario and generate CSV logs
+
+Check the script for topic names and output paths and adjust as needed.
+
+---
+
+## Analysis tools
+
+`analysis_tools/` contains Python scripts to evaluate detection and tracking performance from CSV logs.
+
+Typical inputs per scenario:
+
+- raw radar/camera detections
+- fused detections
+- confirmed tracks
+- ego odometry (pose/yaw over time)
+
+Typical analysis steps:
+
+- transform static pedestrian ground-truth positions into tractor frame using ego odometry
+- associate detections/tracks to pedestrians within a distance threshold
+- compute metrics such as:
+  - detection recall
+  - position RMSE and empirical error radii (e.g., 95% radius)
+  - false detection rate
+  - track availability and ID stability
+  - residual track speeds for static pedestrians
+- plot detections/tracks/ground truth in the tractor body frame
+
+Example usage (script names may differ):
+
+```bash
+cd analysis_tools
+
+python3 analyze_scenario_static.py   --scenario S1   --raw path/to/raw_detections.csv   --fused path/to/fused_detections.csv   --tracks path/to/tracks.csv   --ego path/to/ego_odometry.csv   --out_prefix plots/S1
+```
+
+---
+
+## Using other sensors
+
+Fusion + tracking are sensor-agnostic as long as:
+
+- sensors provide target-level detections (positions and optional covariances) in a known TF frame
+- message types and frame conventions match what `sensor_fusion` expects
+
+To support other sensors:
+
+- replace/adapt `camera_interface` and/or `radar_interface`
+- keep target messages and TF frames consistent
+- retune noise parameters and gating thresholds as needed
+
+---
+
+## Disclaimer
+
+This repository is intended for research and development. It is **not** a certified safety system. Using it on real machinery requires additional engineering, validation, and compliance with local safety regulations.
+
+## Quick command reference (ROS 2 / CAN / Simulation)
+
+The following snippets are a practical “cheat sheet” for running the radar, virtual CAN, Gazebo simulation, and YOLO on a typical development machine.
+
+> Notes:
+> - Replace `WORKSPACE` with your ROS 2 workspace path (e.g. `~/ros2_ws`).
+> - The YOLO stack is assumed to live in `~/yolo_ws` (adjust if different).
+> - You typically need **two terminals** when running Gazebo + YOLO (one for each environment).
+
+### Radar over CAN (PEAK USB-CAN)
+
+```bash
 sudo modprobe peak_usb
 sudo ip link set can0 up type can bitrate 1000000
 ```
 
-To verify that the radar is sending messages through can, execute
-```console
-candump can0
+### Virtual CAN (vcan0) for simulated CAN traffic
+
+Follow the SocketCAN approach described in the python-can docs (SocketCAN):  
+https://python-can.readthedocs.io/en/stable/interfaces/socketcan.html
+
+```bash
+sudo modprobe can
+sudo ip link add dev vcan0 type vcan
+sudo ip link set vcan0 up
 ```
 
-## System architecture:
+### Simulation: teleop keyboard
 
-### Camera node
-- Connects to the camera using depth-ai
-- Currently based on Luxonis OAK-d s2 message format
-- Camera data is transformed into *CameraDetection*s
-    - Messages include:
-        - Header
-            - Timestamp
-            - Target_ID
-        - Results
-            - A list of hypotheses for the object
-            - Hypotheses are of ROS type ObjectHypothesis
-            - Includes:
-                - Class_id: A unique ID of the object class.
-                - Score: The confidence value of the detected object in range 0-1
-                - Not used in Version 0 but will be used in Version 1.
-        - Position
-            - X, y and z in meters
-        - Is_tracking
-            - Boolean value for determining if the object is being tracked or not.
-            - Not used in Version 0, but will be used in Version 1.
-        - Tracking_id
-            - A unique id for a tracked object.
-            - Not used in Version 0, but will be used in Version 1.
-        - Bbox
-            - A bounding box surrounding the object.
-            - Of type BoundingBox2D
-            - Not used in Version 0, but can be utilized later
-- Subscribes to topic “/color/yolov4_Spatial_detections”
-    - This is the topic where oak-d s2 will publish its detections
-- Publishes camera data into ROS topic “/camera_detections”
-### Radar node
-- Receives radar detections through CAN, utilizing SocketCAN
-- Radar data is transformed into RadarDetection type ROS-messages
-    - Messages include:
-        - Position
-            - x, y and z in meters
-        - Speed
-            - Not used in Version 0, but can be utilized later
-        - Header
-            - Timestamp
-            - Target_ID
-        - Distance
-            - Calculated from the position points, based on basic trigonometry
-- Publishes radar data into ROS topic “/radar_detections”
-### Fusion node
-- Subscribes to topics “/camera_detections” and “/radar_detections”
-- Performs sensor fusion for camera and radar
-- Publishes the processed detections into ROS topic “/fused_detections”
-### AgOpenGPS node
-- Communication from AgOpenGPS to ROS2
-- Translates the AgOpenGPS messages to ROS messages
-- Publishes in the ROS topic “/control/agopen”
-- Not implemented in Version 0
-### Tractor control node
-- Subscribes to the ROS topic “/control”
-- Sends control signals to the tractor through CAN (ISOBUS)
-    - Not implemented in Version 0
-### Safety monitor node
-- Includes a state machine for controlling tractor speed
-    - States:
-        - “agopen”
-            - No detections have been seen for detection_active_reset_time
-            - Forwards agopen control commands directly
-        - “moderate”
-            - Is entered when a detection is inside safety_distance_1, but not closer
-            - Tractor speed is overridden to speed_override_1
-            - Transition to state “agopen”, if nothing is detected in detection_active_reset_time
-        - “slow”
-            - Is entered when a detection is inside safety_distance_2, but not closer
-            - Tractor speed is overridden to speed_override_2
-            - Transition to state “moderate”, if nothing is detected in detection_active_reset_time
-        - “stopped”
-            - Is entered when a detection is inside stopping_distance or the tractor is in a unknown state
-            - Tractor is stopped
-            - Transition to state “slow”, if nothing detected in vehicle_stopped_reset_time
-- Subscribes to ROS topics “/control/agopen” and “/fused_detections”
-- Publishes control commands into ROS topic “/control”
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
 
-*Safety monitor state machine:*
+### Simulation: bridges / bring-up
 
-![Safety monitor state machine](safety_monitor_state_machine.png)
+```bash
+source install/setup.bash
+source ~/yolo_ws/install/setup.bash
+ros2 launch simulations bring_up_sim.launch.py
+```
 
-### Simulation
-- Includes nodes and for simulating the hardware components
-- Simulations:
-    - Target_to_fuse
-        - Creates a node publishing matching detections to /camera_detections and /radar_detections simultaneously
-        - Used for testing the fusion algorithm
-    - Object_simulator
-        - Creates random coordinates simulating objects
-    - Radar_simulator
-        - Simulates the SR75 4D radar sensor
-        - Retreives the object coordinates from object_simulator
-        - Creates other neccessary data for a radar detection
-        - Sends the simulated detection through socket-can
-    - Camera_simulator
-        - Simulates the OAK-D Lite Camera sensor
-        - Retreives the object coordinates from object_simulator
-        - Creates other neccessary data for a camera detection
-        - Publishes the simulated detection into /oakd/detections
+### Safety system core components
 
-## Testing
+```bash
+ros2 launch simulations safety_system_core.launch.py
+```
 
-The packages include both unit- and integration tests for verifying the safety system. The tests are included in a ci-pipeline and will be ran in every push to the branch "main". The tests are described below.
+### YOLOv8 object detection (ultralytics-ros)
 
-**Integration test:**
--	Launch the following nodes:
-    - Radar_node
-    - Camera_node
-    - Fusion_node
-    - Safety_monitor_node
-    - Object_simulator
-    - Radar_simulator
-    - Camera_simulator
-    - Agopen_simulator
--	Tested features:
-    - Test if the detections pass through the whole system pipeline and finally a control command is sent based on the detection
+```bash
+source install/setup.bash
+source ~/yolo_ws/.venv/bin/activate
 
-**Unit tests for independent nodes:**
+ros2 launch ultralytics_ros tracker.launch.xml   device:=cpu   yolo_model:=yolov8n.pt   input_topic:=/sim/cam/rgb   result_topic:=/yolo/result   result_image_topic:=/yolo/debug_image
+```
 
-- test_camera_node:
-    - Test the radar data extraction from CAN
-    - Test if a RadarDetection is formed correctly and published in /radar_detections
+### Run the simulator with provided world manually (Gazebo Sim)
 
-- test_radar_node:
-    - Test if the camera node can receive messages from /oakd/detections
-    - Test if the node correctly processes received detections and publishes them to /camera_detections as CameraDetections
+```bash
+cd WORKSPACE/src/simulations
+export GZ_SIM_RESOURCE_PATH=$GZ_SIM_RESOURCE_PATH:~/playground/src/simulations/models
+gz sim worlds/simple_field.sdf
+```
 
-- Fusion node tests:
-    - test_fusion:
-        - Test the fusion algorithm with corresponding detections from camera and radar
-        - Test if fused detections are published correctly
-    - test_single_sensor_detection:
-        - Test the processing of individual detections from camera and radar
-        - Test if detections are published correctly
-    - test_fusion_parameters:
-        - Test that parameters can be updated
-    - test_detection_limits:
-        - Test functionality with camera detections too far and radar detections too close
-            - Should not publish
+### Run one scenario (S1–S4)
 
-- Safety_monitor tests:
-    - test_state_transitions:
-        - Agopen
-            - -> moderate, when detection inside safety_distance_1
-            - -> slow, when detection inside safety_distance_2
-            - -> stopped, when detection inside stop_distance
-        - Moderate 
-            - -> slow, when detection inside safety_distance_2
-            - -> stopped, when detection inside stop_distance
-            - -> No change, when detection is inside safety_distance_1, or outside the safety distances
-            - -> agopen, if no detections in active_detection_reset_time
-        - Slow
-            - -> stopped, when detection inside stop_distance
-            - No change, when detection inside outside of stop_distance
-            - -> moderate, if no detections in active_detection_reset_time
-        - Stopped
-            - -> slow, if no detections in vehicle_stopped_reset_time
-            - No change from detections
-        - Test with unknown state
-            - Should stop
-    - test_safety_monitor_parameters:
-        - Test that parameters can be updated
-    - test_speed_control:
-        - Agopen speed is overridden to speed_override_1, when in state moderate
-        - Agopen speed is overridden to speed_override_2, when in state slow
-        - No control commands are sent from agopen, when in state stopped
-        - A stop command is sent, when in unknown state
+Prerequisite: start the **Ultralytics YOLO tracker** (`ultralytics_ros`) in **another terminal** using the **same ROS 2 domain / environment**, so the simulation publishes camera images and the ultralytics tracker publishes detections (e.g. `/yolo/result`).
+
+```bash
+cd WORKSPACE
+source install/setup.bash
+source ~/yolo_ws/install/setup.bash
+
+ros2 launch simulations run_experiment_sim.launch.py scenario:=SCENARIO
+```
+
+Where:
+- `SCENARIO` = `S1`, `S2`, `S3`, or `S4`
+
+### Run all scenarios (S1–S4)
+
+Prerequisite: start the **Ultralytics YOLO tracker** (`ultralytics_ros`) in **another terminal** using the **same ROS 2 domain / environment**, so the simulation publishes camera images and the tracker publishes detections (e.g. `/yolo/result`).
+
+```bash
+cd WORKSPACE
+source install/setup.bash
+source ~/yolo_ws/install/setup.bash
+
+chmod +x run_all_simulation_scenarios.sh
+./run_all_simulation_scenarios.sh
+```
