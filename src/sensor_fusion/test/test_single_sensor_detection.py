@@ -39,7 +39,6 @@ import time
 import unittest
 
 from geometry_msgs.msg import Point
-import numpy as np
 import rclpy
 from sensor_fusion.fusion_node import FusionNode
 from std_msgs.msg import Header
@@ -104,17 +103,11 @@ class TestSingleSensorDetection(unittest.TestCase):
         hypothesis2 = ObjectHypothesis(class_id='person', score=0.4)
         camera_msg_untrusted = self.create_camera_detection(15.0, 3.0, 0.0, hypothesis2)
 
-        # Override parameters for testing
-        self.fusion_node.time_threshold = 0.1
-        self.fusion_node.camera_trust_max = 12.0
-        self.fusion_node.R = np.eye(3)  # Identity matrix (no rotation)
-        self.fusion_node.T = np.zeros(3)  # No translation
-
         # Test with untrusted detections:
 
         # Add camera detection to the fusion node
         self.fusion_node.camera_detections.append(camera_msg_untrusted)
-        # Wait for a little while to publish
+        # Wait for a little while to publish as individual
         time.sleep(0.15)
         # Attempt fusion
         self.fusion_node.attempt_fusion()
@@ -124,15 +117,10 @@ class TestSingleSensorDetection(unittest.TestCase):
                          msg='No detections should have been published.')
 
         # Test with trusted detections:
-
-        # Update timestamps to ensure they are recent
-        radar_msg_trusted.header.stamp = self.fusion_node.get_clock().now().to_msg()
-        camera_msg_trusted.header.stamp = self.fusion_node.get_clock().now().to_msg()
-
         # Add radar detection to the fusion node
         self.fusion_node.radar_detections.append(radar_msg_trusted)
 
-        # Wait for a little while to publish
+        # Wait for a little while to publish as individual
         time.sleep(0.15)
 
         # Attempt fusion
@@ -141,7 +129,7 @@ class TestSingleSensorDetection(unittest.TestCase):
         # Add camera detection to the fusion node
         self.fusion_node.camera_detections.append(camera_msg_trusted)
 
-        # Wait for a little while to publish
+        # Wait for a little while to publish as individual
         time.sleep(0.15)
 
         # Attempt fusion

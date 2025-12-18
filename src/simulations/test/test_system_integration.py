@@ -74,12 +74,6 @@ def generate_test_description():
         package='sensor_fusion',
         executable='fusion_node',
         name='fusion_node',
-        parameters=[{
-            'rotation_matrix': [1.0, 0.0, 0.0,
-                                0.0, 1.0, 0.0,
-                                0.0, 0.0, 1.0],
-            'translation_vector': [0.0, 0.0, 0.0],
-        }],
         output='screen'
         )
     safety_monitor = Node(
@@ -87,6 +81,35 @@ def generate_test_description():
         executable='safety_monitor',
         name='safety_monitor',
         output='screen')
+
+    # --------------------
+    # Static TFs (match your SDF poses)
+    # --------------------
+    # base_link -> camera optical (0, 0, 0) + optical rotation RPY(-90, 0, -90)
+    tf_cam = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_tf_camera_optical',
+        arguments=[
+            '0', '0', '0',   '-1.5708', '0', '-1.5708',
+            'base_link',
+            'camera_link'
+        ],
+        output='screen'
+    )
+
+    # base_link -> radar (0, 0, 0)
+    tf_radar = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_tf_radar',
+        arguments=[
+            '0', '0', '0',   '0', '0', '0',
+            'base_link',
+            'radar_link'
+        ],
+        output='screen'
+    )
 
     return LaunchDescription([
         object_simulator,
@@ -97,6 +120,8 @@ def generate_test_description():
         radar_node,
         fusion_node,
         safety_monitor,
+        tf_cam,
+        tf_radar,
 
         TimerAction(period=5.0, actions=[launch_testing.actions.ReadyToTest()]),
     ]), {

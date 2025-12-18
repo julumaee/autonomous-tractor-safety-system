@@ -37,11 +37,10 @@
 import unittest
 
 from geometry_msgs.msg import Point
-import numpy as np
 import rclpy
 from sensor_fusion.fusion_node import FusionNode
 from std_msgs.msg import Header
-from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
+from tractor_safety_system_interfaces.msg import CameraDetection
 
 
 class TestDetectionLimits(unittest.TestCase):
@@ -73,34 +72,13 @@ class TestDetectionLimits(unittest.TestCase):
         """Create a CameraDetection message."""
         msg = CameraDetection()
         msg.header = Header()
-        msg.header.stamp.sec = 1  # Simulated timestamp
-        msg.header.stamp.nanosec = 0
+        msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
-        return msg
-
-    def create_radar_detection(self, x, y, z, distance, speed):
-        """Create a RadarDetection message."""
-        msg = RadarDetection()
-        msg.header = Header()
-        msg.header.stamp.sec = 1
-        msg.header.stamp.nanosec = 0
-        msg.position = Point(x=x, y=y, z=z)
-        msg.distance = distance
-        msg.speed = speed
         return msg
 
     def test_untrusted_detections_handling(self):
         """Ensure that untrusted radar and camera detections are handled correctly."""
         camera_too_far = self.create_camera_detection(20.0, 30.0, 0.0)
-        radar_too_close = self.create_radar_detection(1.0, 0.0, 0.0, distance=1, speed=2)
-
-        # Override parameters for testing
-        self.fusion_node.time_threshold = 0.5
-        self.fusion_node.distance_threshold = 1.0
-        self.fusion_node.radar_trust_min = 4.0
-        self.fusion_node.camera_trust_max = 12.0
-        self.fusion_node.R = np.eye(3)  # Identity matrix (no rotation)
-        self.fusion_node.T = np.zeros(3)  # No translation
 
         # Add camera detection to the fusion node
         self.fusion_node.camera_detections.append(camera_too_far)
@@ -111,26 +89,6 @@ class TestDetectionLimits(unittest.TestCase):
         # Check if the detection was published
         self.assertEqual(len(self.published_detections), 0,
                          msg='Camera detection too far, nothing should have been published.')
-
-        # Check if the detection was removed from the deque
-        self.assertEqual(len(self.fusion_node.camera_detections), 0,
-                         msg='Camera detection too far, \
-                         should have been removed from the deque')
-
-        # Add radar detection to the fusion node
-        self.fusion_node.radar_detections.append(radar_too_close)
-
-        # Attempt fusion
-        self.fusion_node.attempt_fusion()
-
-        # Check if the detection was published
-        self.assertEqual(len(self.published_detections), 0,
-                         msg='Radar detection too close, nothing should have been published.')
-
-        # Check if the detection was removed from the deque
-        self.assertEqual(len(self.fusion_node.radar_detections), 0,
-                         msg='Radar detection too close, \
-                         should have been removed from the deque')
 
 
 if __name__ == '__main__':

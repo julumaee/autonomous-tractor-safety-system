@@ -35,6 +35,7 @@ def generate_launch_description():
         description='Path to parameters YAML for safety_monitor'
     )
 
+    # Option to start safety monitor
     start_safety_monitor_arg = DeclareLaunchArgument(
         'start_safety_monitor',
         default_value='true',

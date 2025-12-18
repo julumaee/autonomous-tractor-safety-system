@@ -14,13 +14,12 @@
 
 # Logs raw sensor detections, fused detections and tracks
 # to CSV files for offline analysis.
-
-import math
-
 import csv
 from datetime import datetime
-from nav_msgs.msg import Odometry
+import math
 import os
+
+from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from tractor_safety_system_interfaces.msg import (
@@ -52,7 +51,7 @@ class DetectionLogger(Node):
 
         # Raw camera / radar detections
         self.raw_file = open(
-            os.path.join(log_dir, f'raw_detections_{self.scenario_name}_{timestamp}.csv'),
+            os.path.join(log_dir, f'raw_detections_{self.scenario_name}.csv'),
             'w', newline=''
         )
         self.raw_writer = csv.writer(self.raw_file)
@@ -61,11 +60,12 @@ class DetectionLogger(Node):
             'logger_stamp',         # arrival to logger
             'header_stamp',         # detection timestamp
             'x', 'y', 'z',          # position
+            f'Simulation was run at: {timestamp}',
         ])
 
         # Fused detections
         self.fused_file = open(
-            os.path.join(log_dir, f'fused_detections_{self.scenario_name}_{timestamp}.csv'),
+            os.path.join(log_dir, f'fused_detections_{self.scenario_name}.csv'),
             'w', newline=''
         )
         self.fused_writer = csv.writer(self.fused_file)
@@ -76,11 +76,12 @@ class DetectionLogger(Node):
             'x', 'y', 'z',          # position
             'distance',             # distance to ego
             'speed',                # speed of the detected object
+            f'Simulation was run at: {timestamp}',
         ])
 
         # Tracks
         self.tracks_file = open(
-            os.path.join(log_dir, f'tracks_{self.scenario_name}_{timestamp}.csv'),
+            os.path.join(log_dir, f'tracks_{self.scenario_name}.csv'),
             'w', newline=''
         )
         self.tracks_writer = csv.writer(self.tracks_file)
@@ -91,11 +92,14 @@ class DetectionLogger(Node):
             'x', 'y', 'z',          # position
             'distance',             # distance to ego
             'speed',                # speed of the tracked object (ego-compensated)
+            'age',                  # number of frames since track was created
+            'consecutive_misses',   # number of consecutive misses for the track
+            f'Simulation was run at: {timestamp}',
         ])
 
         # Ego ground truth (odometry)
         self.ego_file = open(
-            os.path.join(log_dir, f'ego_odom_{self.scenario_name}_{timestamp}.csv'),
+            os.path.join(log_dir, f'ego_odom_{self.scenario_name}.csv'),
             'w', newline=''
         )
         self.ego_writer = csv.writer(self.ego_file)
@@ -106,6 +110,7 @@ class DetectionLogger(Node):
             'yaw',                  # orientation
             'v',                    # forward speed
             'yaw_rate',             # yaw rate
+            f'Simulation was run at: {timestamp}',
         ])
 
         # -----------------------
@@ -146,7 +151,7 @@ class DetectionLogger(Node):
 
     def _stamp_to_seconds(self, time_msg) -> float:
         """Convert ROS2 Time message to datetime."""
-        return time_msg.sec + time_msg.nanosec * 1e-9 
+        return time_msg.sec + time_msg.nanosec * 1e-9
 
     def _get_current_time(self) -> float:
         """Get current time."""
@@ -164,7 +169,6 @@ class DetectionLogger(Node):
             'radar',
             logger_time,
             header_time,
-            msg.header.frame_id,
             msg.position.x,
             msg.position.y,
             msg.position.z,
@@ -177,7 +181,6 @@ class DetectionLogger(Node):
             'camera',
             logger_time,
             header_time,
-            msg.header.frame_id,
             msg.position.x,
             msg.position.y,
             msg.position.z,
@@ -199,9 +202,9 @@ class DetectionLogger(Node):
 
     def handle_track(self, msg: FusedDetectionArray):
         """Tracks published by KF tracker as FusedDetectionArray messages."""
-        header_time = self._stamp_to_seconds(msg.header.stamp)
-        logger_time = self._get_current_time()
         for msg in msg.detections:
+            header_time = self._stamp_to_seconds(msg.header.stamp)
+            logger_time = self._get_current_time()
             self.tracks_writer.writerow([
                 logger_time,
                 header_time,
@@ -211,7 +214,9 @@ class DetectionLogger(Node):
                 msg.position.z,
                 msg.distance,
                 msg.speed,
-        ])
+                msg.age,
+                msg.consecutive_misses,
+            ])
 
     def handle_odom(self, msg: Odometry):
         header_time = self._stamp_to_seconds(msg.header.stamp)

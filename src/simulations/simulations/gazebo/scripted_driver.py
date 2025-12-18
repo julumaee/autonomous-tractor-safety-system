@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
+from geometry_msgs.msg import Twist
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist
 
 
 class ScriptedDriver(Node):
+
     def __init__(self):
         super().__init__('scripted_driver')
 
@@ -67,7 +67,7 @@ class ScriptedDriver(Node):
             # S1: drive straight towards a static pedestrian.
             return [
                 (3.0, 0.0, 0.0),   # stand still 3 s (for setup)
-                (29.0, 1.0, 0.0),  # drive straight 30 s
+                (14.0, 2.0, 0.0),  # drive straight 14 s
                 (3.0, 0.0, 0.0),   # stand still
             ]
         elif scenario == 'S2':

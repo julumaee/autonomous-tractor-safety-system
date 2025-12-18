@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+
 from ament_index_python.packages import get_package_share_path
 from launch import LaunchDescription
 from launch.actions import (
@@ -56,11 +57,11 @@ def generate_launch_description():
 
     # Frames coming from SDF
     cam_opt_frame = DeclareLaunchArgument(
-        'camera_optical_frame',
+        'camera_frame',
         default_value='tractor_simple/camera_link/front_depth_optical'
     )
-    lidar_frame = DeclareLaunchArgument(
-        'lidar_frame',
+    radar_frame = DeclareLaunchArgument(
+        'radar_frame',
         default_value='tractor_simple/lidar_link/front_lidar'
     )
 
@@ -141,7 +142,7 @@ def generate_launch_description():
 
         # clock (no LaunchConfiguration here)
         TextSubstitution(text='/world/simple_field/clock@rosgraph_msgs/msg/Clock@gz.msgs.Clock'),
-        
+
         # Odometry and pedestrian poses
         TextSubstitution(
             text='/model/tractor_simple/odometry@nav_msgs/msg/Odometry@gz.msgs.Odometry'),
@@ -158,35 +159,6 @@ def generate_launch_description():
             ('/model/tractor_simple/odometry', '/odom'),
         ],
         arguments=bridge_args
-    )
-
-    # --------------------
-    # Static TFs (match your SDF poses)
-    # --------------------
-    # base_link -> camera optical (0.5, 0, 0.9) + optical rotation RPY(-90, 0, -90)
-    tf_cam = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='static_tf_camera_optical',
-        arguments=[
-            '0.5', '0', '0.9',   '-1.5708', '0', '-1.5708',
-            LaunchConfiguration('base_frame'),
-            LaunchConfiguration('camera_optical_frame')
-        ],
-        output='screen'
-    )
-
-    # base_link -> lidar (0.6, 0, 0.6)
-    tf_lidar = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='static_tf_lidar',
-        arguments=[
-            '0.6', '0', '0.6',   '0', '0', '0',
-            LaunchConfiguration('base_frame'),
-            LaunchConfiguration('lidar_frame')
-        ],
-        output='screen'
     )
 
     # --------------------
@@ -285,7 +257,7 @@ def generate_launch_description():
         rgb_topic, depth_topic, camera_info_topic,
         lidar_points_topic,
         lidar_scan_topic,
-        cam_opt_frame, lidar_frame,
+        cam_opt_frame, radar_frame,
         cmd_vel_in, nav_cmd_out_topic, safety_out_topic,
         d2d_topic, spatial_out_topic, use_d2d_relay,
         start_teleop_bridges_arg, start_rviz_bridge_arg,
@@ -293,7 +265,6 @@ def generate_launch_description():
         gz_sim,
         # nodes
         bridge_node,
-        tf_cam, tf_lidar,
         spatial_from_yolo,
         lidar_to_radar,
         twist_to_control,

@@ -21,3 +21,7 @@ string tracking_id
 # between fused, radar, and camera detections.
 # Valid values are "fused", "radar", "camera" and "tracked".
 string detection_type
+
+# Values for tracked objects. Used only if if_tracking is set to True.
+uint32 age                    # Number of update cycles
+uint32 consecutive_misses     # How many updates missed

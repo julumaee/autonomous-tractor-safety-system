@@ -33,7 +33,6 @@
 
 import unittest
 
-import numpy as np
 import rclpy
 from rclpy.parameter import Parameter
 from sensor_fusion.fusion_node import FusionNode
@@ -60,19 +59,12 @@ class TestFusionParameters(unittest.TestCase):
         new_params = [
             Parameter(name='time_threshold', value=1.0),
             Parameter(name='camera_trust_max', value=15.0),
-            Parameter(name='rotation_matrix',
-                      value=[0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
-            Parameter(name='translation_vector', value=[1.0, 2.0, 3.0])
         ]
         self.fusion_node.on_set_parameters(new_params)
 
         # Check that the parameters are updated correctly
         self.assertEqual(self.fusion_node.time_threshold, 1.0)
         self.assertEqual(self.fusion_node.camera_trust_max, 15.0)
-        np.testing.assert_array_equal(self.fusion_node.R, np.array([[0.0, -1.0, 0.0],
-                                                                    [1.0, 0.0, 0.0],
-                                                                    [0.0, 0.0, 1.0]]))
-        np.testing.assert_array_equal(self.fusion_node.T, np.array([1.0, 2.0, 3.0]))
 
 
 if __name__ == '__main__':

@@ -90,13 +90,9 @@ class TestFusionNode(unittest.TestCase):
     def test_fusion_performs_correctly(self):
         """Ensure that radar and camera detections are correctly fused and published."""
         camera_msg = self.create_camera_detection(12.0, 3.0, 0.0)
-        radar_msg = self.create_radar_detection(12.1, 3.1, 0.0, distance=11, speed=2)
-
-        # Override parameters for testing
-        self.fusion_node.time_threshold = 0.5
-        self.fusion_node.camera_trust_max = 12.0
-        self.fusion_node.R = np.eye(3)  # Identity matrix (no rotation)
-        self.fusion_node.T = np.zeros(3)  # No translation
+        radar_msg = self.create_radar_detection(12.0, 3.0, 0.0,
+                                                distance=np.sqrt(12.0**2 + 3.0**2),
+                                                speed=2)
 
         # Add detections to the fusion node
         self.fusion_node.camera_detections.append(camera_msg)
@@ -114,12 +110,12 @@ class TestFusionNode(unittest.TestCase):
 
         self.assertEqual(fused_detection.detection_type, 'fused',
                          msg='Detection type should be fused')
-        self.assertAlmostEqual(fused_detection.position.x, radar_msg.position.x, places=2,
-                               msg='Fused position X should match radar')
-        self.assertAlmostEqual(fused_detection.position.y, radar_msg.position.y, places=2,
-                               msg='Fused position Y should match radar')
-        self.assertEqual(fused_detection.distance, radar_msg.distance,
-                         msg='Fused distance should match radar')
+        self.assertAlmostEqual(fused_detection.position.x, radar_msg.position.x, places=1,
+                               msg='Fused position X should match true position')
+        self.assertAlmostEqual(fused_detection.position.y, radar_msg.position.y, places=1,
+                               msg='Fused position Y should match true position')
+        self.assertAlmostEqual(fused_detection.distance, radar_msg.distance, places=1,
+                               msg='Fused distance should match radar')
         self.assertEqual(fused_detection.speed, radar_msg.speed,
                          msg='Fused speed should match radar')
 

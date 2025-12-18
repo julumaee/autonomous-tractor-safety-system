@@ -1,24 +1,10 @@
 fusion_node:
   ros__parameters:
     # Time threshold for detection matching
-    time_threshold: 0.5  # seconds
-
-    # Distance threshold for detection matching
-    distance_threshold: 1.0  # meters
-
-    # Minimum distance to trust radar detections without fusion
-    radar_trust_min: 2.0
+    time_threshold: 0.1  # seconds
 
     # Maximum distance to trust camera detections without fusion
     camera_trust_max: 12.0
-
-    # Rotation matrix for transforming camera coordinates to radar coordinates
-    rotation_matrix:  [0.97144628, -0.103039, 0.21371729,
-                      -0.13169109, -0.9834477, 0.12445109,
-                      0.19735646, -0.14904222, -0.96893593]
-
-    # Translation vector for transforming camera coordinates to radar coordinates
-    translation_vector: [0.1365367, 0.17875305, -0.17737524]
 
 safety_monitor:
   ros__parameters:

@@ -11,6 +11,7 @@
     </include>
 
     <!-- S4: Three persons at 20 meters in a row-->
+
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
       <name>person_1</name>
@@ -22,7 +23,7 @@
       <name>person_2</name>
       <pose>20 0 0 0 0 -1.5708</pose>
     </include>
-
+  
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
       <name>person_3</name>

@@ -18,7 +18,10 @@ from geometry_msgs.msg import TwistWithCovarianceStamped as TWCS
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from tractor_safety_system_interfaces.msg import FusedDetection, FusedDetectionArray
+from tractor_safety_system_interfaces.msg import (
+    FusedDetection,
+    FusedDetectionArray
+)
 
 
 def rot2d(theta):
@@ -54,11 +57,9 @@ class EgoKFTracker(Node):
         self.declare_parameter('max_yaw_rate', 1.0)                  # rad/s safety clamp
 
         # --- KF modelling
-        self.declare_parameter('sigma_accel', 2.0)    # m/s^2 (constant-accel white noise)
-        self.declare_parameter('Q_ego_pos', 0.02)     # extra pos var from ego DR per step (m^2)
-        self.declare_parameter('Q_ego_yaw', 0.0004)   # extra yaw var (rad^2) mapped to pos via v
-        self.declare_parameter('R_meas_xy', 0.5)      # m std for fused measurement (per-axis)
-        self.declare_parameter('gate_chi2', 10.597)     # 99.5% in 2D
+        self.declare_parameter('sigma_accel', 3.0)    # m/s^2 (constant-accel white noise)
+        self.declare_parameter('R_meas_xy', 0.3)      # m std for fused measurement (per-axis)
+        self.declare_parameter('gate_chi2', 10.597)   # 99.5% in 2D
 
         # --- Track mgmt
         self.declare_parameter('spawn_hits', 3)          # how many hits to confirm a track
@@ -76,8 +77,6 @@ class EgoKFTracker(Node):
         self.max_yaw_rate = float(self.get_parameter('max_yaw_rate').value)
 
         self.sigma_accel = float(self.get_parameter('sigma_accel').value)
-        self.Q_ego_pos = float(self.get_parameter('Q_ego_pos').value)
-        self.Q_ego_yaw = float(self.get_parameter('Q_ego_yaw').value)
         self.R_meas = (float(self.get_parameter('R_meas_xy').value)**2) * np.eye(2)
         self.gate_chi2 = float(self.get_parameter('gate_chi2').value)
 
@@ -88,6 +87,10 @@ class EgoKFTracker(Node):
 
         self.dt_nom = 1.0/float(self.get_parameter('update_rate').value)
         self.enable_ego_drag = bool(self.get_parameter('enable_ego_drag').value)
+
+        self.ego_x = 0.0
+        self.ego_y = 0.0
+        self.ego_yaw = 0.0
 
         # Subscriptions
         self.sub_det = self.create_subscription(
@@ -116,21 +119,25 @@ class EgoKFTracker(Node):
     # ------------------ Inputs ------------------
 
     def on_detection(self, msg: FusedDetection):
-        position = np.array([msg.position.x, msg.position.y], dtype=float)
-        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
+        """Receive and store a fused detection in ego frame."""
+        position_ego = np.array([msg.position.x, msg.position.y], dtype=float)
+        position_world = self.ego_to_world_pos(position_ego)
+        stamp = msg.header.stamp
         source = msg.detection_type
         # store immediately in a small buffer for this cycle
         # Simple approach: push onto a list; the timer will consume and clear.
         if not hasattr(self, '_meas_buf'):
             self._meas_buf = []
-        self._meas_buf.append((position, self.R_meas, stamp, source))
+        self._meas_buf.append((position_world, self.R_meas, stamp, source))
 
     def on_ego_odom(self, twist_msg: TWCS):
+        """Receive ego vehicle twist (body frame)."""
         self.u_v = float(twist_msg.twist.twist.linear.x)
         self.u_delta = float(twist_msg.twist.twist.angular.z)
         self.u_stamp = twist_msg.header.stamp.sec + twist_msg.header.stamp.nanosec * 1e-9
 
     def publish_tracks(self):
+        """Publish confirmed tracks in ego (base_link) frame."""
         now = self.get_clock().now().to_msg()
         track_array = FusedDetectionArray()
         track_array.header.stamp = now
@@ -138,31 +145,117 @@ class EgoKFTracker(Node):
             if tr.hits < self.spawn_hits:
                 continue  # only publish confirmed
             msg = FusedDetection()
-            msg.header.stamp = now
+            msg.header.stamp = tr.last_stamp
             msg.header.frame_id = 'base_link'
-            msg.position.x = float(tr.x[0])
-            msg.position.y = float(tr.x[1])
+            position_ego = self.world_to_ego_pos(tr.x[0:2])
+            velocity_ego = self.world_to_ego_vel(tr.x[2:4])
+            msg.position.x = float(position_ego[0])
+            msg.position.y = float(position_ego[1])
             msg.position.z = 0.0
             msg.distance = float(np.hypot(tr.x[0], tr.x[1]))
-            vx, vy = float(tr.x[2]), float(tr.x[3])
+            vx = float(velocity_ego[0])
+            vy = float(velocity_ego[1])
             msg.speed = float(np.hypot(vx, vy))
             msg.is_tracking = True
             msg.tracking_id = f'object_{tr.id}'
             msg.detection_type = 'tracked'
+            msg.age = tr.age
+            msg.consecutive_misses = tr.miss
             track_array.detections.append(msg)
         self.pub_tracks.publish(track_array)
 
+    def update_ego_pose(self, dt: float) -> None:
+        """
+        Integrate ego pose in a local world (odometry) frame.
+
+        use current body-frame twist:
+        v = self.u_v [m/s], yaw_rate = self.u_delta [rad/s].
+        """
+        if dt <= 0.0:
+            return
+
+        v = float(self.u_v)        # forward speed in base_link
+        yaw_rate = float(self.u_delta)  # THIS IS YAW RATE [rad/s], NOT steering angle
+
+        # small-step integration in ego/body frame
+        dx_body = v * dt
+        dy_body = 0.0
+        dth = yaw_rate * dt
+
+        # rotate body displacement into world frame using current heading
+        c = math.cos(self.ego_yaw)
+        s = math.sin(self.ego_yaw)
+        dx_world = c * dx_body - s * dy_body
+        dy_world = s * dx_body + c * dy_body
+
+        # update ego pose in world frame
+        self.ego_x += dx_world
+        self.ego_y += dy_world
+        self.ego_yaw += dth
+
+    def ego_to_world_pos(self, p_ego: np.ndarray) -> np.ndarray:
+        """
+        Convert a 2D position from ego (base_link) to world (odometry) frame.
+
+        p_ego: shape (2,)
+        """
+        c = math.cos(self.ego_yaw)
+        s = math.sin(self.ego_yaw)
+        R = np.array([[c, -s],
+                      [s,  c]], dtype=float)
+        t = np.array([self.ego_x, self.ego_y], dtype=float)
+        return t + R @ p_ego
+
+    def world_to_ego_pos(self, p_world: np.ndarray) -> np.ndarray:
+        """
+        Convert a 2D position from world (odometry) to ego (base_link) frame.
+
+        p_world: shape (2,)
+        """
+        c = math.cos(self.ego_yaw)
+        s = math.sin(self.ego_yaw)
+        R_T = np.array([[c, s],
+                        [-s, c]], dtype=float)
+        t = np.array([self.ego_x, self.ego_y], dtype=float)
+        return R_T @ (p_world - t)
+
+    def ego_to_world_vel(self, v_ego: np.ndarray) -> np.ndarray:
+        """
+        Convert a 2D velocity from ego frame to world frame.
+
+        Note: we assume small dt, so we just rotate the vector.
+        """
+        c = math.cos(self.ego_yaw)
+        s = math.sin(self.ego_yaw)
+        R = np.array([[c, -s],
+                      [s,  c]], dtype=float)
+        return R @ v_ego
+
+    def world_to_ego_vel(self, v_world: np.ndarray) -> np.ndarray:
+        """Convert a 2D velocity from world frame to ego frame."""
+        c = math.cos(self.ego_yaw)
+        s = math.sin(self.ego_yaw)
+        R_T = np.array([[c, s],
+                        [-s, c]], dtype=float)
+        return R_T @ v_world
+
     def on_timer(self):
+        """
+        Perform all operations in the timer loop.
+
+        1. Ego update
+        2. KF predict/update
+        3. track mgmt
+        4. publish.
+        """
         now = self.get_clock().now().nanoseconds * 1e-9
         if self.last_timer_stamp is None:
             self.last_timer_stamp = now
 
         dt = max(1e-3, now - self.last_timer_stamp)
 
-        # 1. Ego-drag all tracks into *current* base_link if ego_drag enabled
-        if self.tracks and self.enable_ego_drag:
-            dx, dy, dth = self.integrate_bicycle(self.u_v, self.u_delta, dt)
-            self.apply_ego_drag(dx, dy, dth)
+        # 1. Update ego pose
+        self.update_ego_pose(dt)
 
         # 2. KF predict for all tracks over dt
         if self.tracks:
@@ -184,56 +277,26 @@ class EgoKFTracker(Node):
         self.maintain_tracks()
         self.publish_tracks()
         self.last_timer_stamp = now
-        #for tr in self.tracks:
+        # for tr in self.tracks:
         #    self.get_logger().info(f'Track {tr.id}: pos=({tr.x[0]:.2f},{tr.x[1]:.2f}) '
         #                           f'vel=({tr.x[2]:.2f},{tr.x[3]:.2f}) '
         #                           f'hits={tr.hits} miss={tr.miss} age={tr.age}')
 
     # ------------------ Ego dead-reckoning ------------------
 
-    def integrate_bicycle(self, v, delta, dt):
-        # clamp yaw rate
-        if abs(delta) < 1e-6 or abs(v) < 1e-6 or dt <= 0.0:
-            return v*dt, 0.0, 0.0
+    def integrate_twist(v, yaw_rate, dt):
+        """Dead-reckon pose change over dt given body-frame twist."""
+        # motion expressed in the *previous* body frame
+        dx = v * dt         # move forward in body x
+        dy = 0.0            # no lateral motion in body frame
+        dth = yaw_rate * dt  # heading change
 
-        yaw_rate = v * math.tan(delta) / max(1e-6, self.L)
-        yaw_rate = float(np.clip(yaw_rate, -self.max_yaw_rate, self.max_yaw_rate))
-        th = yaw_rate * dt
-
-        # Exact body-frame displacement (old ego frame)
-        if abs(th) < 1e-6:
-            dx = v*dt
-            dy = 0.0
-        else:
-            R = v / yaw_rate
-            dx = R * math.sin(th)
-            dy = R * (1.0 - math.cos(th))
-        return dx, dy, th
-
-    def apply_ego_drag(self, dx, dy, dth):
-        # For any fixed world point expressed in old base_link:
-        # p_new = R(-dth) @ (p_old - t), where t=[dx,dy] in old base frame
-        if abs(dx) < 1e-12 and abs(dy) < 1e-12 and abs(dth) < 1e-12:
-            return
-        Rm = rot2d(-dth)
-        t = np.array([dx, dy], dtype=float)
-        # Build block rotation for [x,y,vx,vy]
-        G = np.zeros((4, 4))
-        G[0:2, 0:2] = Rm
-        G[2:4, 2:4] = Rm
-
-        for tr in self.tracks:
-            pos = tr.x[:2]
-            vel = tr.x[2:]
-            pos_new = Rm @ (pos - t)
-            vel_new = Rm @ vel
-            tr.x[0:2] = pos_new
-            tr.x[2:4] = vel_new
-            tr.P = G @ tr.P @ G.T
+        return dx, dy, dth
 
     # ------------------ KF predict/update ------------------
 
     def kf_predict_all(self, dt):
+        """KF predict step for all tracks over dt."""
         # Constant-velocity model with discrete white accel noise
         a = self.sigma_accel  # Acceleration std
         # State transition matrix:
@@ -254,6 +317,7 @@ class EgoKFTracker(Node):
             tr.age += 1
 
     def kf_update_track(self, tr, position, Rm, H, stamp):
+        """KF update step for a single track with one measurement."""
         # KF update
         y = position - H @ tr.x  # Innovation
         S = H @ tr.P @ H.T + Rm   # Innovation covariance
@@ -273,6 +337,7 @@ class EgoKFTracker(Node):
         tr.last_stamp = stamp
 
     def associate_and_update(self, meas_list):
+        """Associate measurements to tracks and perform KF updates."""
         # Simple NN gating per measurement.
         # Map state to measurement
         H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
@@ -331,6 +396,7 @@ class EgoKFTracker(Node):
             self.next_id += 1
 
     def maintain_tracks(self):
+        """Age and delete tracks based on hits/misses."""
         kept = []
         for tr in self.tracks:
             # confirm criterion

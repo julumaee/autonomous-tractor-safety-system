@@ -16,11 +16,9 @@ import math
 
 import numpy as np
 import rclpy
-from rclpy.duration import Duration
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
-from tf2_ros import Buffer, TransformListener
 from tractor_safety_system_interfaces.msg import RadarDetection
 
 
@@ -29,19 +27,19 @@ class SimpleLidarToRadar(Node):
     def __init__(self):
         super().__init__('simple_lidar_to_radar')
         self.declare_parameter('cloud_topic', '/sim/lidar/points')
-        self.declare_parameter('base_frame', 'base_link')
+        self.declare_parameter('radar_frame', 'radar_link')
         self.declare_parameter('y_max', 10.0)       # lateral half-width (m) for “in front”
-        self.declare_parameter('z_min', 0.05)      # ground reject (m)
-        self.declare_parameter('z_max', 2.5)       # max height (m)
+        self.declare_parameter('z_min', -0.55)      # ground reject (m)
+        self.declare_parameter('z_max', 2.5)        # max height (m)
         self.declare_parameter('distance_mode', 'longitudinal')  # 'euclidean' or 'longitudinal'
         self.declare_parameter('az_bins', 36)           # how many angular sectors in front
-        self.declare_parameter('fov_left_deg', 75.0)    # left limit (positive Y side)
-        self.declare_parameter('fov_right_deg', 75.0)   # right limit (negative Y side)
+        self.declare_parameter('fov_left_deg', 65.0)    # left limit (positive Y side)
+        self.declare_parameter('fov_right_deg', 65.0)   # right limit (negative Y side)
         self.declare_parameter('min_points_bin', 1)     # require N points in a bin
         self.declare_parameter('max_targets', 16)       # cap how many we publish per cloud
 
         self.cloud_topic = self.get_parameter('cloud_topic').get_parameter_value().string_value
-        self.base_frame = self.get_parameter('base_frame').get_parameter_value().string_value
+        self.radar_frame = self.get_parameter('radar_frame').get_parameter_value().string_value
         self.y_max = float(self.get_parameter('y_max').value)
         self.z_min = float(self.get_parameter('z_min').value)
         self.z_max = float(self.get_parameter('z_max').value)
@@ -51,9 +49,6 @@ class SimpleLidarToRadar(Node):
         self.fov_right_rad = math.radians(float(self.get_parameter('fov_right_deg').value))
         self.min_points_bin = int(self.get_parameter('min_points_bin').value)
         self.max_targets = int(self.get_parameter('max_targets').value)
-
-        self.tfbuf = Buffer()
-        self.tfl = TransformListener(self.tfbuf, self)
 
         self.sub = self.create_subscription(
             PointCloud2, self.cloud_topic, self.on_cloud, rclpy.qos.qos_profile_sensor_data)
@@ -71,14 +66,6 @@ class SimpleLidarToRadar(Node):
             f'frame={msg.header.frame_id} w={msg.width} h={msg.height} '
             f'point_step={msg.point_step} row_step={msg.row_step} data={len(msg.data)} bytes'
         )
-        # TF to base_link
-        try:
-            tf = self.tfbuf.lookup_transform(
-                self.base_frame, msg.header.frame_id, msg.header.stamp,
-                timeout=Duration(seconds=0.05))
-        except Exception as e:
-            self.get_logger().warn(f'TF {msg.header.frame_id}->{self.base_frame} missing: {e}')
-            return
 
         try:
             arr = pc2.read_points_numpy(
@@ -125,25 +112,10 @@ class SimpleLidarToRadar(Node):
             )
             return
 
-        # Apply transform (rotation+translation)
-        # Build 3x3 R and t from geometry_msgs/Transform
-        q = tf.transform.rotation
-        n = math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w) or 1.0
-        x, y, z, w = q.x/n, q.y/n, q.z/n, q.w/n
-        R = np.array([
-            [1-2*(y*y+z*z), 2*(x*y - w*z), 2*(x*z + w*y)],
-            [2*(x*y + w*z), 1-2*(x*x+z*z), 2*(y*z - w*x)],
-            [2*(x*z - w*y), 2*(y*z + w*x), 1-2*(x*x+y*y)]
-        ], dtype=np.float64)
-        t = np.array([tf.transform.translation.x,
-                      tf.transform.translation.y,
-                      tf.transform.translation.z], dtype=np.float64)
-        pts_bl = (R @ pts.T).T + t
-
         # Forward frustum & height/lateral gates
-        x = pts_bl[:, 0]
-        y = pts_bl[:, 1]
-        z = pts_bl[:, 2]
+        x = pts[:, 0]
+        y = pts[:, 1]
+        z = pts[:, 2]
         m = (x > 0.0) & (np.abs(y) <= self.y_max) & (z >= self.z_min) & (z <= self.z_max)
         if not np.any(m):
             return
@@ -185,26 +157,78 @@ class SimpleLidarToRadar(Node):
             j = idxs[np.argmin(d[idxs])]
             detections.append((bi, x[j], y[j], z[j], d[j]))
 
+        if not detections:
+            return
+
         # Keep nearest N overall (optional)
         detections.sort(key=lambda it: it[4])
         if len(detections) > self.max_targets:
             detections = detections[:self.max_targets]
 
-        # Publish one message per detection
-        t_now = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        # Cluster adjacent bins into "objects" and compute centroids
+        # Sort by bin index so that adjacent detections in azimuth are neighbors
+        detections.sort(key=lambda it: it[0])  # sort by bi
+
+        clusters = []
+        current_cluster = []
+        last_bi = None
+
         for bi, xb, yb, zb, dist in detections:
-            # simple per-bin speed estimate (closing speed)
-            prev = self.prev_by_bin.get(bi)
+            if last_bi is None:
+                current_cluster = [(bi, xb, yb, zb, dist)]
+            else:
+                # if this bin is adjacent to previous, same cluster
+                if bi == last_bi or bi == last_bi + 1:
+                    current_cluster.append((bi, xb, yb, zb, dist))
+                else:
+                    clusters.append(current_cluster)
+                    current_cluster = [(bi, xb, yb, zb, dist)]
+            last_bi = bi
+
+        if current_cluster:
+            clusters.append(current_cluster)
+
+        # Compute one centroid per cluster
+        centroids = []
+        for cl in clusters:
+            bis = np.array([c[0] for c in cl], dtype=np.int32)
+            xs = np.array([c[1] for c in cl], dtype=np.float64)
+            ys = np.array([c[2] for c in cl], dtype=np.float64)
+            zs = np.array([c[3] for c in cl], dtype=np.float64)
+            dists = np.array([c[4] for c in cl], dtype=np.float64)
+
+            # representative bin = mean of bins (rounded)
+            rep_bi = int(round(bis.mean()))
+            # centroid in x,y,z (simple mean; you could also weight by 1/dist if you want)
+            cx = xs.mean()
+            cy = ys.mean()
+            cz = zs.mean()
+            cd = dists.mean()
+
+            centroids.append((rep_bi, cx, cy, cz, cd))
+
+        # Optional: still limit how many targets we publish
+        centroids.sort(key=lambda it: it[4])  # by distance
+        if len(centroids) > self.max_targets:
+            centroids = centroids[:self.max_targets]
+
+        # ------------------------------------------------------------
+        # Publish one RadarDetection per centroid
+        # ------------------------------------------------------------
+        t_now = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        for rep_bi, xb, yb, zb, dist in centroids:
+            # simple speed estimate using representative bin index
+            prev = self.prev_by_bin.get(rep_bi)
             speed_mps = 0.0
             if prev is not None:
                 pd, pt = prev
                 dt = max(1e-3, t_now - pt)
                 speed_mps = (pd - float(dist)) / dt  # + if getting closer
-            self.prev_by_bin[bi] = (float(dist), t_now)
+            self.prev_by_bin[rep_bi] = (float(dist), t_now)
 
             out = RadarDetection()
             out.header.stamp = self.get_clock().now().to_msg()
-            out.header.frame_id = self.base_frame
+            out.header.frame_id = self.radar_frame
             out.position.x = float(xb)
             out.position.y = float(yb)
             out.position.z = float(zb)

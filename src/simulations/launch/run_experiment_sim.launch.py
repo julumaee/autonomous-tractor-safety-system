@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+
 from ament_index_python.packages import get_package_share_path
 from launch import LaunchDescription
 from launch.actions import (
@@ -64,11 +65,22 @@ def generate_launch_description():
 
     run_system = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_share, 'launch', 'run_system_gazebo.launch.py')
+            os.path.join(pkg_share, 'launch', 'safety_system_core.launch.py')
         ),
         launch_arguments={
             'params': LaunchConfiguration('params'),
             'start_safety_monitor': 'false',
+            'start_radar': 'false',
+            'start_control': 'false',
+            'camera_tf_x': '0.5',
+            'camera_tf_y': '0.0',
+            'camera_tf_z': '0.9',
+            'camera_tf_roll': '-1.5708',  # -90 degrees in radians
+            'camera_tf_pitch': '0.0',
+            'camera_tf_yaw': '-1.5708',  # -90 degrees in radians
+            'radar_tf_x': '0.6',
+            'radar_tf_y': '0.0',
+            'radar_tf_z': '0.6',
         }.items()
     )
 
@@ -96,14 +108,12 @@ def generate_launch_description():
 
     detection_logger = TimerAction(
         period=5.0,
-        actions=
-            [detection_logger_node]
+        actions=[detection_logger_node]
     )
 
     scripted_driver = TimerAction(
         period=5.0,
-        actions=
-            [scripted_driver_node]
+        actions=[scripted_driver_node]
     )
 
     # When the driver exits, shut down the whole launch system

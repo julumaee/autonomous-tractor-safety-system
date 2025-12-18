@@ -3,24 +3,9 @@ fusion_node:
     # Use simulation time
     use_sim_time: True
     # Time threshold for detection matching
-    time_threshold: 0.5  # seconds
-
-    # Distance threshold for detection matching
-    distance_threshold: 1.0  # meters
-
-    # Minimum distance to trust radar detections without fusion
-    radar_trust_min: 0.0
-
+    time_threshold: 0.1  # seconds
     # Maximum distance to trust camera detections without fusion
     camera_trust_max: 12.0
-
-    # Rotation matrix for transforming radar coordinates to camera coordinates
-    rotation_matrix: [1.0, 0.0, 0.0,
-                      0.0, 1.0, 0.0,
-                      0.0, 0.0, 1.0]  # Default: identity matrix
-
-    # Translation vector for transforming radar coordinates to camera coordinates
-    translation_vector: [0.0, 0.0, 0.0]  # Default: no translation
 
 safety_monitor:
   ros__parameters:
@@ -43,16 +28,16 @@ safety_monitor:
 
 camera_node:
   ros__parameters:
-    # Use simulation time
     use_sim_time: True
 
 kf_tracker:
   ros__parameters:
-    # Use simulation time
+    enable_ego_drag: True
     use_sim_time: True
 
 radar_node:
   ros__parameters:
+    use_sim_time: True
     # Can bus channel
     can_channel: vcan0
 
