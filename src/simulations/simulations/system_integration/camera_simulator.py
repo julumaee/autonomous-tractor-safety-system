@@ -67,11 +67,11 @@ class CameraSimulator(Node):
             )
             result_with_pose.pose.pose.position = camera_position
             detection.results = [result_with_pose]
-            
+
             detection.bbox = (
                 self.generate_bounding_box()
             )
-            
+
             detection.is_tracking = random.choice([True, False])
             if detection.is_tracking:
                 detection.tracking_id = f"object_{simulated_object.object_id}"

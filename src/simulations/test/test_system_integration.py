@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# NOTE: This test requires a virtual CAN interface (vcan0) to be set up prior to running.
+# You can set it up using the following commands:
+#   sudo modprobe vcan
+#   sudo ip link add dev vcan0 type vcan
+#   sudo ip link set up vcan0
+
 import time
 import unittest
 
@@ -27,7 +33,10 @@ from tractor_safety_system_interfaces.msg import ControlCommand, FusedDetection
 
 @pytest.mark.rostest
 def generate_test_description():
-    """Launch all necessary nodes for the integration test."""
+    """
+    Launch all necessary nodes for the integration test.
+    """
+
     object_simulator = Node(
         package="simulations",
         executable="object_simulator",
@@ -144,7 +153,7 @@ class TestIntegration(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        """Shutdown ROS2 after tests complete."""
+        """Shutdown ROS2 after tests complete and clean up vcan0."""
         rclpy.shutdown()
 
     def setUp(self):

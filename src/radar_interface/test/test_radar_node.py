@@ -36,7 +36,7 @@ class TestRadarNode(unittest.TestCase):
     def setUp(self):
         """Initialize RadarNode with a mocked CAN bus."""
         # Mock `listen_to_can()` so it does nothing
-        with patch.object(RadarNode, "listen_to_can"), patch(
+        with patch.object(RadarNode, "poll_can"), patch(
             "can.interface.Bus"
         ) as MockBus:
 

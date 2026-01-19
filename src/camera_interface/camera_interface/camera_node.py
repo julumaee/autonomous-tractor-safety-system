@@ -133,22 +133,15 @@ class CameraNode(Node):
                 and hasattr(detection.results[0].pose, "pose")
             ):
                 pos = detection.results[0].pose.pose.position
-                # Validate: 3D positions should be in meters
+                position_candidate = pos
+                position_source = "results[0].pose.pose.position"
+
+                # Validate: check if it looks like a valid 3D position or pixel coords
                 # Pixel coordinates typically: x,y in 0-2000 range, z=0 or very small
-                # Real 3D positions: z should be positive and reasonable (0.1-100m for camera)
                 is_pixel_coords = pos.z <= 0.01 or (
                     abs(pos.x) < 3000 and abs(pos.y) < 3000 and pos.z < 0.1
                 )
-                is_valid_3d = (
-                    pos.z < 200.0  # reasonable depth range
-                    and abs(pos.x) < 100.0
-                    and abs(pos.y) < 100.0
-                )  # reasonable lateral range
-
-                if is_valid_3d and not is_pixel_coords:
-                    position_candidate = pos
-                    position_source = "results[0].pose.pose.position"
-                elif self.enable_logging:
+                if self.enable_logging and is_pixel_coords:
                     self.get_logger().warn(
                         f"Results pose position looks like pixels: "
                         f"({pos.x:.2f}, {pos.y:.2f}, {pos.z:.2f})"
@@ -161,21 +154,13 @@ class CameraNode(Node):
                 and detection.bbox
             ):
                 pos = detection.bbox.center.position
-                # Validate: check if it looks like a valid 3D position
+                position_candidate = pos
+                position_source = "bbox.center.position"
+                # Validate: check if it looks like a valid 3D position or pixel coords
                 is_pixel_coords = pos.z <= 0.01 or (
                     abs(pos.x) < 3000 and abs(pos.y) < 3000 and pos.z < 0.1
                 )
-                is_valid_3d = (
-                    pos.z > 0.1
-                    and pos.z < 200.0
-                    and abs(pos.x) < 100.0
-                    and abs(pos.y) < 100.0
-                )
-
-                if is_valid_3d and not is_pixel_coords:
-                    position_candidate = pos
-                    position_source = "bbox.center.position"
-                elif self.enable_logging:
+                if self.enable_logging and is_pixel_coords:
                     self.get_logger().warn(
                         f"Bbox center position looks like pixels: "
                         f"({pos.x:.2f}, {pos.y:.2f}, {pos.z:.2f})"
@@ -238,14 +223,6 @@ class CameraNode(Node):
                 self.get_logger().warn("Detection3DArray has no detections field")
                 return
 
-            if not hasattr(detection_array_msg, "header"):
-                self.get_logger().warn(
-                    "Detection3DArray has no header field, using current time"
-                )
-                header_stamp = self.get_clock().now().to_msg()
-            else:
-                header_stamp = detection_array_msg.header.stamp
-
             # Validate detections list
             if not isinstance(detection_array_msg.detections, (list, tuple)):
                 self.get_logger().warn(
@@ -256,7 +233,7 @@ class CameraNode(Node):
             # Convert and publish each detection
             detection_count = 0
             for detection in detection_array_msg.detections:
-                camera_detection_msg = self.convert_message(detection, header_stamp)
+                camera_detection_msg = self.convert_message(detection)
                 if camera_detection_msg is not None:
                     self.publisher_.publish(camera_detection_msg)
                     detection_count += 1

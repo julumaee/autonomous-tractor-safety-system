@@ -28,10 +28,19 @@ class RadarSimulator(Node):
         self.object_subscription = self.create_subscription(
             SimulatedObject, "/simulated_objects", self.send_radar_data, 10
         )
-        self.bus = can.interface.Bus(channel="vcan0", bustype="socketcan")
+        try:
+            self.bus = can.interface.Bus(channel="vcan0", bustype="socketcan")
+            self.get_logger().info("Connected to CAN bus (vcan0)")
+        except Exception as e:
+            self.get_logger().error(f"Failed to connect to CAN bus: {e}")
+            self.bus = None
 
     def send_radar_data(self, simulated_object):
         """Send radar data frames over the virtual CAN bus."""
+        if self.bus is None:
+            self.get_logger().warn("CAN bus not connected, cannot send radar data")
+            return
+
         vrel_long = random.uniform(-30.0, 30.0)
         cluster_id = simulated_object.object_id & 0x7F
         dist_long = simulated_object.position.x
