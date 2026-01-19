@@ -36,10 +36,11 @@
 
 import unittest
 
-from geometry_msgs.msg import Point
 import rclpy
-from sensor_fusion.fusion_node import FusionNode
+from geometry_msgs.msg import Point
 from std_msgs.msg import Header
+
+from sensor_fusion.fusion_node import FusionNode
 from tractor_safety_system_interfaces.msg import CameraDetection
 
 
@@ -87,9 +88,12 @@ class TestDetectionLimits(unittest.TestCase):
         self.fusion_node.attempt_fusion()
 
         # Check if the detection was published
-        self.assertEqual(len(self.published_detections), 0,
-                         msg='Camera detection too far, nothing should have been published.')
+        self.assertEqual(
+            len(self.published_detections),
+            0,
+            msg="Camera detection too far, nothing should have been published.",
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

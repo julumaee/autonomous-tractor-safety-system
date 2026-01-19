@@ -4,7 +4,6 @@
 
 std_msgs/Header header
 vision_msgs/ObjectHypothesis[] results  # Class probabilities
-vision_msgs/BoundingBox2D bbox          # 2D bounding box surrounding the object
 geometry_msgs/Point position            # Center of the detected object in meters
 
 float32 distance    # Distance in meters

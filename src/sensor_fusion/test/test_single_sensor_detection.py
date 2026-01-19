@@ -38,12 +38,13 @@
 import time
 import unittest
 
-from geometry_msgs.msg import Point
 import rclpy
-from sensor_fusion.fusion_node import FusionNode
+from geometry_msgs.msg import Point
 from std_msgs.msg import Header
-from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 from vision_msgs.msg import ObjectHypothesis
+
+from sensor_fusion.fusion_node import FusionNode
+from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 
 
 class TestSingleSensorDetection(unittest.TestCase):
@@ -87,20 +88,20 @@ class TestSingleSensorDetection(unittest.TestCase):
         msg.header = Header()
         msg.header.stamp = self.fusion_node.get_clock().now().to_msg()
         msg.position = Point(x=x, y=y, z=z)
-        msg.distance = (x**2 + y**2)**0.5
+        msg.distance = (x**2 + y**2) ** 0.5
         msg.speed = speed
         return msg
 
     def test_single_detection_handling(self):
         """Ensure correct handling of individual radar and camera detections."""
         # Create a camera detection passing the trust threshold
-        hypothesis1 = ObjectHypothesis(class_id='person', score=0.95)
+        hypothesis1 = ObjectHypothesis(class_id="person", score=0.95)
         camera_msg_trusted = self.create_camera_detection(3.0, 3.0, 0.0, hypothesis1)
         # Create a radar detection passing the trust threshold
         radar_msg_trusted = self.create_radar_detection(10.0, 20.0, 0.0, speed=2)
 
         # Create a camera detection not passing the trust threshold
-        hypothesis2 = ObjectHypothesis(class_id='person', score=0.4)
+        hypothesis2 = ObjectHypothesis(class_id="person", score=0.4)
         camera_msg_untrusted = self.create_camera_detection(15.0, 3.0, 0.0, hypothesis2)
 
         # Test with untrusted detections:
@@ -113,8 +114,11 @@ class TestSingleSensorDetection(unittest.TestCase):
         self.fusion_node.attempt_fusion()
 
         # Check if no detections have been published
-        self.assertEqual(len(self.published_detections), 0,
-                         msg='No detections should have been published.')
+        self.assertEqual(
+            len(self.published_detections),
+            0,
+            msg="No detections should have been published.",
+        )
 
         # Test with trusted detections:
         # Add radar detection to the fusion node
@@ -136,42 +140,63 @@ class TestSingleSensorDetection(unittest.TestCase):
         self.fusion_node.attempt_fusion()
 
         # Check if both detections have been published
-        self.assertEqual(len(self.published_detections), 2,
-                         msg='Both detections should have been published.')
+        self.assertEqual(
+            len(self.published_detections),
+            2,
+            msg="Both detections should have been published.",
+        )
 
         # Verify that the sent detections have expected values
         radar_detection = self.published_detections[0]
 
-        self.assertEqual(radar_detection.detection_type, 'radar',
-                         msg='Sent radar detection should be of type radar')
-        self.assertAlmostEqual(radar_detection.position.x,
-                               radar_msg_trusted.position.x,
-                               places=2,
-                               msg='Fused position X should match radar')
-        self.assertAlmostEqual(radar_detection.position.y,
-                               radar_msg_trusted.position.y,
-                               places=2,
-                               msg='Fused position Y should match radar')
-        self.assertEqual(radar_detection.distance,
-                         radar_msg_trusted.distance,
-                         msg='Fused distance should match radar')
-        self.assertEqual(radar_detection.speed,
-                         radar_msg_trusted.speed,
-                         msg='Fused speed should match radar')
+        self.assertEqual(
+            radar_detection.detection_type,
+            "radar",
+            msg="Sent radar detection should be of type radar",
+        )
+        self.assertAlmostEqual(
+            radar_detection.position.x,
+            radar_msg_trusted.position.x,
+            places=2,
+            msg="Fused position X should match radar",
+        )
+        self.assertAlmostEqual(
+            radar_detection.position.y,
+            radar_msg_trusted.position.y,
+            places=2,
+            msg="Fused position Y should match radar",
+        )
+        self.assertEqual(
+            radar_detection.distance,
+            radar_msg_trusted.distance,
+            msg="Fused distance should match radar",
+        )
+        self.assertEqual(
+            radar_detection.speed,
+            radar_msg_trusted.speed,
+            msg="Fused speed should match radar",
+        )
 
         camera_detection = self.published_detections[1]
 
-        self.assertEqual(camera_detection.detection_type, 'camera',
-                         msg='Sent camera detection should be of type camera')
-        self.assertAlmostEqual(camera_detection.position.x,
-                               camera_msg_trusted.position.x,
-                               places=2,
-                               msg='Position X should match camera')
-        self.assertAlmostEqual(camera_detection.position.y,
-                               camera_msg_trusted.position.y,
-                               places=2,
-                               msg='Position Y should match camera')
+        self.assertEqual(
+            camera_detection.detection_type,
+            "camera",
+            msg="Sent camera detection should be of type camera",
+        )
+        self.assertAlmostEqual(
+            camera_detection.position.x,
+            camera_msg_trusted.position.x,
+            places=2,
+            msg="Position X should match camera",
+        )
+        self.assertAlmostEqual(
+            camera_detection.position.y,
+            camera_msg_trusted.position.y,
+            places=2,
+            msg="Position Y should match camera",
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

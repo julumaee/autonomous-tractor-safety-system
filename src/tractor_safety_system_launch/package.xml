@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>tractor_safety_system_launch</name>
+  <version>0.0.0</version>
+  <description>Launch files for the autonomous tractor safety system</description>
+  <maintainer email="eemil.kulmala@hotmail.com">Eemil Kulmala</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>tf2_ros</depend>
+
+  <!-- Pipeline packages -->
+  <exec_depend>camera_interface</exec_depend>
+  <exec_depend>radar_interface</exec_depend>
+  <exec_depend>sensor_fusion</exec_depend>
+  <exec_depend>safety_monitor</exec_depend>
+  <exec_depend>tractor_control</exec_depend>
+  <exec_depend>tractor_safety_system_interfaces</exec_depend>
+  
+  <!-- Note: simulations package configs are referenced at runtime via get_package_share_path
+       but not declared as a dependency to avoid circular dependency. The simulations package
+       must be installed for the default config path to work. -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -17,19 +17,18 @@ import random
 import can
 import rclpy
 from rclpy.node import Node
+
 from tractor_safety_system_interfaces.msg import SimulatedObject
 
 
 class RadarSimulator(Node):
 
     def __init__(self):
-        super().__init__('radar_simulator')
+        super().__init__("radar_simulator")
         self.object_subscription = self.create_subscription(
-            SimulatedObject,
-            '/simulated_objects',
-            self.send_radar_data,
-            10)
-        self.bus = can.interface.Bus(channel='vcan0', bustype='socketcan')
+            SimulatedObject, "/simulated_objects", self.send_radar_data, 10
+        )
+        self.bus = can.interface.Bus(channel="vcan0", bustype="socketcan")
 
     def send_radar_data(self, simulated_object):
         """Send radar data frames over the virtual CAN bus."""
@@ -50,9 +49,9 @@ class RadarSimulator(Node):
         try:
             self.bus.send(msg0)
             self.bus.send(msg1)
-            self.get_logger().info(f'Sent Radar Frames for ID={cluster_id}')
+            self.get_logger().info(f"Sent Radar Frames for ID={cluster_id}")
         except can.CanError as e:
-            self.get_logger().error(f'Failed to send radar frames: {e}')
+            self.get_logger().error(f"Failed to send radar frames: {e}")
 
     @staticmethod
     def format_frame0(cluster_id, dist_long, dist_lat, vrel_long):
@@ -116,5 +115,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

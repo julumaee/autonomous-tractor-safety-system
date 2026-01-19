@@ -16,7 +16,12 @@ import os
 
 from ament_index_python.packages import get_package_share_path
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, Shutdown
+from launch.actions import (
+    DeclareLaunchArgument,
+    LogInfo,
+    RegisterEventHandler,
+    Shutdown,
+)
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -24,86 +29,79 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     # Resolve default parameter file inside the installed package
-    pkg_share = get_package_share_path('simulations')
-    default_params = os.path.join(pkg_share, 'config', 'parameters_simulated.yaml')
+    pkg_share = get_package_share_path("simulations")
+    default_params = os.path.join(pkg_share, "config", "parameters_simulated.yaml")
 
     # Allow overriding from CLI: params:=/abs/path/to/custom.yaml
     params_arg = DeclareLaunchArgument(
-        'params',
+        "params",
         default_value=default_params,
-        description='Path to parameters_simulated YAML'
+        description="Path to parameters_simulated YAML",
     )
-    params = LaunchConfiguration('params')
+    params = LaunchConfiguration("params")
 
     # List of all nodes to launch
     nodes = [
         # Object Simulator (Generates objects)
         Node(
-            package='simulations',
-            executable='object_simulator',
-            name='object_simulator',
+            package="simulations",
+            executable="object_simulator",
+            name="object_simulator",
             parameters=[params],
-            output='screen'
+            output="screen",
         ),
-
         # Radar Simulator (Sends radar detections over CAN)
         Node(
-            package='simulations',
-            executable='radar_simulator_can',
-            name='radar_simulator',
-            output='screen'
+            package="simulations",
+            executable="radar_simulator_can",
+            name="radar_simulator",
+            output="screen",
         ),
-
         # Camera Simulator (Generates camera detections)
         Node(
-            package='simulations',
-            executable='camera_simulator',
-            name='camera_simulator',
-            output='screen'
+            package="simulations",
+            executable="camera_simulator",
+            name="camera_simulator",
+            output="screen",
         ),
-
         # AgOpen Simulator (Simulates AgOpenGPS control commands)
         Node(
-            package='simulations',
-            executable='agopen_simulator',
-            name='agopen_simulator',
-            output='screen'
+            package="simulations",
+            executable="agopen_simulator",
+            name="agopen_simulator",
+            output="screen",
         ),
-
         # Camera Node (Processes real or simulated camera detections)
         Node(
-            package='camera_interface',
-            executable='camera_node',
-            name='camera_node',
-            output='screen'
+            package="camera_interface",
+            executable="camera_node",
+            name="camera_node",
+            output="screen",
         ),
-
         # Radar Node (Processes real or simulated radar detections)
         Node(
-            package='radar_interface',
-            executable='radar_node',
-            name='radar_node',
+            package="radar_interface",
+            executable="radar_node",
+            name="radar_node",
             parameters=[params],
-            output='screen'
+            output="screen",
         ),
-
         # Sensor Fusion Node (Combines camera & radar data)
         Node(
-            package='sensor_fusion',
-            executable='fusion_node',
-            name='fusion_node',
+            package="sensor_fusion",
+            executable="fusion_node",
+            name="fusion_node",
             parameters=[params],
-            output='screen'
+            output="screen",
         ),
-
         # Safety Monitor (Monitors fused detections and controls vehicle state)
         Node(
-            package='safety_monitor',
-            executable='safety_monitor',
-            name='safety_monitor',
+            package="safety_monitor",
+            executable="safety_monitor",
+            name="safety_monitor",
             parameters=[params],
-            output='screen'
-        )
+            output="screen",
+        ),
     ]
 
     # Create shutdown handlers for all nodes
@@ -111,18 +109,20 @@ def generate_launch_description():
         RegisterEventHandler(
             OnProcessExit(
                 target_action=node,
-                on_exit=[Shutdown()]  # Shut down all nodes when any one exits
+                on_exit=[Shutdown()],  # Shut down all nodes when any one exits
             )
         )
         for node in nodes
     ]
 
-    return LaunchDescription([
-        params_arg,
-        # Log message to indicate test start
-        LogInfo(msg='Launching all nodes...'),
-        *nodes,
-        *shutdown_handlers,
-        # Log message to indicate test setup completion
-        LogInfo(msg='All nodes launched successfully.'),
-    ])
+    return LaunchDescription(
+        [
+            params_arg,
+            # Log message to indicate test start
+            LogInfo(msg="Launching all nodes..."),
+            *nodes,
+            *shutdown_handlers,
+            # Log message to indicate test setup completion
+            LogInfo(msg="All nodes launched successfully."),
+        ]
+    )

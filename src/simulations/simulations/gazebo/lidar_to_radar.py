@@ -16,87 +16,104 @@ import math
 
 import numpy as np
 import rclpy
+import sensor_msgs_py.point_cloud2 as pc2
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
-import sensor_msgs_py.point_cloud2 as pc2
+
 from tractor_safety_system_interfaces.msg import RadarDetection
 
 
 class SimpleLidarToRadar(Node):
 
     def __init__(self):
-        super().__init__('simple_lidar_to_radar')
-        self.declare_parameter('cloud_topic', '/sim/lidar/points')
-        self.declare_parameter('radar_frame', 'radar_link')
-        self.declare_parameter('y_max', 10.0)       # lateral half-width (m) for “in front”
-        self.declare_parameter('z_min', -0.55)      # ground reject (m)
-        self.declare_parameter('z_max', 2.5)        # max height (m)
-        self.declare_parameter('distance_mode', 'longitudinal')  # 'euclidean' or 'longitudinal'
-        self.declare_parameter('az_bins', 36)           # how many angular sectors in front
-        self.declare_parameter('fov_left_deg', 65.0)    # left limit (positive Y side)
-        self.declare_parameter('fov_right_deg', 65.0)   # right limit (negative Y side)
-        self.declare_parameter('min_points_bin', 1)     # require N points in a bin
-        self.declare_parameter('max_targets', 16)       # cap how many we publish per cloud
+        super().__init__("simple_lidar_to_radar")
+        self.declare_parameter("cloud_topic", "/sim/lidar/points")
+        self.declare_parameter("radar_frame", "radar_link")
+        self.declare_parameter("y_max", 10.0)  # lateral half-width (m) for “in front”
+        self.declare_parameter("z_min", -0.55)  # ground reject (m)
+        self.declare_parameter("z_max", 2.5)  # max height (m)
+        self.declare_parameter(
+            "distance_mode", "longitudinal"
+        )  # 'euclidean' or 'longitudinal'
+        self.declare_parameter("az_bins", 36)  # how many angular sectors in front
+        self.declare_parameter("fov_left_deg", 65.0)  # left limit (positive Y side)
+        self.declare_parameter("fov_right_deg", 65.0)  # right limit (negative Y side)
+        self.declare_parameter("min_points_bin", 1)  # require N points in a bin
+        self.declare_parameter("max_targets", 16)  # cap how many we publish per cloud
 
-        self.cloud_topic = self.get_parameter('cloud_topic').get_parameter_value().string_value
-        self.radar_frame = self.get_parameter('radar_frame').get_parameter_value().string_value
-        self.y_max = float(self.get_parameter('y_max').value)
-        self.z_min = float(self.get_parameter('z_min').value)
-        self.z_max = float(self.get_parameter('z_max').value)
-        self.distance_mode = self.get_parameter('distance_mode').get_parameter_value().string_value
-        self.az_bins = int(self.get_parameter('az_bins').value)
-        self.fov_left_rad = math.radians(float(self.get_parameter('fov_left_deg').value))
-        self.fov_right_rad = math.radians(float(self.get_parameter('fov_right_deg').value))
-        self.min_points_bin = int(self.get_parameter('min_points_bin').value)
-        self.max_targets = int(self.get_parameter('max_targets').value)
+        self.cloud_topic = (
+            self.get_parameter("cloud_topic").get_parameter_value().string_value
+        )
+        self.radar_frame = (
+            self.get_parameter("radar_frame").get_parameter_value().string_value
+        )
+        self.y_max = float(self.get_parameter("y_max").value)
+        self.z_min = float(self.get_parameter("z_min").value)
+        self.z_max = float(self.get_parameter("z_max").value)
+        self.distance_mode = (
+            self.get_parameter("distance_mode").get_parameter_value().string_value
+        )
+        self.az_bins = int(self.get_parameter("az_bins").value)
+        self.fov_left_rad = math.radians(
+            float(self.get_parameter("fov_left_deg").value)
+        )
+        self.fov_right_rad = math.radians(
+            float(self.get_parameter("fov_right_deg").value)
+        )
+        self.min_points_bin = int(self.get_parameter("min_points_bin").value)
+        self.max_targets = int(self.get_parameter("max_targets").value)
 
         self.sub = self.create_subscription(
-            PointCloud2, self.cloud_topic, self.on_cloud, rclpy.qos.qos_profile_sensor_data)
-        self.pub = self.create_publisher(RadarDetection, '/radar_detections', 10)
+            PointCloud2,
+            self.cloud_topic,
+            self.on_cloud,
+            rclpy.qos.qos_profile_sensor_data,
+        )
+        self.pub = self.create_publisher(RadarDetection, "/radar_detections", 10)
 
         self.prev_dist = None
         self.prev_time = None
         self.prev_by_bin = {}  # bin_idx -> (dist_m, t_sec)
 
-        self.get_logger().info('Simple LiDAR→Radar running.')
+        self.get_logger().info("Simple LiDAR→Radar running.")
 
     def on_cloud(self, msg: PointCloud2):
         self.get_logger().debug(
-            f'Cloud stamp={msg.header.stamp.sec}.{msg.header.stamp.nanosec} '
-            f'frame={msg.header.frame_id} w={msg.width} h={msg.height} '
-            f'point_step={msg.point_step} row_step={msg.row_step} data={len(msg.data)} bytes'
+            f"Cloud stamp={msg.header.stamp.sec}.{msg.header.stamp.nanosec} "
+            f"frame={msg.header.frame_id} w={msg.width} h={msg.height} "
+            f"point_step={msg.point_step} row_step={msg.row_step} data={len(msg.data)} bytes"
         )
 
         try:
             arr = pc2.read_points_numpy(
                 msg,
-                field_names=('x', 'y', 'z'),
+                field_names=("x", "y", "z"),
                 skip_nans=False,
             )
         except Exception as e:
-            self.get_logger().warn(f'read_points_numpy failed: {e}')
+            self.get_logger().warn(f"read_points_numpy failed: {e}")
             return
 
         if arr.size == 0:
             self.get_logger().warn(
-                f'PointCloud2 parse produced 0 values '
-                f'(w={msg.width}'
-                f'h={msg.height}'
-                f'point_step={msg.point_step}'
-                f'row_step={msg.row_step}'
-                f'len(data)={len(msg.data)}'
-                f'is_bigendian={msg.is_bigendian})'
+                f"PointCloud2 parse produced 0 values "
+                f"(w={msg.width}"
+                f"h={msg.height}"
+                f"point_step={msg.point_step}"
+                f"row_step={msg.row_step}"
+                f"len(data)={len(msg.data)}"
+                f"is_bigendian={msg.is_bigendian})"
             )
             return
 
         # Normalize to (N,3) float64
         pts = np.asarray(arr)
         # If it's a structured array (dtype.names present), rebuild (N,3)
-        if getattr(pts, 'dtype', None) is not None and pts.dtype.names is not None:
+        if getattr(pts, "dtype", None) is not None and pts.dtype.names is not None:
             try:
-                pts = np.vstack([pts['x'], pts['y'], pts['z']]).T
+                pts = np.vstack([pts["x"], pts["y"], pts["z"]]).T
             except Exception as e:
-                self.get_logger().warn(f'Failed to unpack structured array: {e}')
+                self.get_logger().warn(f"Failed to unpack structured array: {e}")
                 return
         if pts.ndim == 1:
             pts = pts.reshape((-1, 3))
@@ -107,8 +124,8 @@ class SimpleLidarToRadar(Node):
         pts = pts[mask]
         if pts.shape[0] == 0:
             self.get_logger().warn(
-                'All points are non-finite after filtering '
-                f'(original {arr.shape[0]}). Check lidar config / bridge.'
+                "All points are non-finite after filtering "
+                f"(original {arr.shape[0]}). Check lidar config / bridge."
             )
             return
 
@@ -116,7 +133,12 @@ class SimpleLidarToRadar(Node):
         x = pts[:, 0]
         y = pts[:, 1]
         z = pts[:, 2]
-        m = (x > 0.0) & (np.abs(y) <= self.y_max) & (z >= self.z_min) & (z <= self.z_max)
+        m = (
+            (x > 0.0)
+            & (np.abs(y) <= self.y_max)
+            & (z >= self.z_min)
+            & (z <= self.z_max)
+        )
         if not np.any(m):
             return
         x = x[m]
@@ -133,10 +155,10 @@ class SimpleLidarToRadar(Node):
         z = z[m_fov]
         az = az[m_fov]
         # Choose distance per-point
-        if self.distance_mode == 'longitudinal':
+        if self.distance_mode == "longitudinal":
             d = x  # longitudinal distance
         else:
-            d = np.sqrt(x*x + y*y + z*z)  # euclidean
+            d = np.sqrt(x * x + y * y + z * z)  # euclidean
 
         # Bin edges across the kept FOV
         left = self.fov_left_rad
@@ -163,7 +185,7 @@ class SimpleLidarToRadar(Node):
         # Keep nearest N overall (optional)
         detections.sort(key=lambda it: it[4])
         if len(detections) > self.max_targets:
-            detections = detections[:self.max_targets]
+            detections = detections[: self.max_targets]
 
         # Cluster adjacent bins into "objects" and compute centroids
         # Sort by bin index so that adjacent detections in azimuth are neighbors
@@ -210,7 +232,7 @@ class SimpleLidarToRadar(Node):
         # Optional: still limit how many targets we publish
         centroids.sort(key=lambda it: it[4])  # by distance
         if len(centroids) > self.max_targets:
-            centroids = centroids[:self.max_targets]
+            centroids = centroids[: self.max_targets]
 
         # ------------------------------------------------------------
         # Publish one RadarDetection per centroid
@@ -232,8 +254,8 @@ class SimpleLidarToRadar(Node):
             out.position.x = float(xb)
             out.position.y = float(yb)
             out.position.z = float(zb)
-            out.distance = float(dist)          # meters
-            out.speed = float(speed_mps)        # m/s
+            out.distance = float(dist)  # meters
+            out.speed = float(speed_mps)  # m/s
             self.pub.publish(out)
 
 
@@ -243,5 +265,5 @@ def main():
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -15,13 +15,14 @@
 # Logs raw sensor detections, fused detections and tracks
 # to CSV files for offline analysis.
 import csv
-from datetime import datetime
 import math
 import os
+from datetime import datetime
 
-from nav_msgs.msg import Odometry
 import rclpy
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
+
 from tractor_safety_system_interfaces.msg import (
     CameraDetection,
     FusedDetection,
@@ -33,16 +34,16 @@ from tractor_safety_system_interfaces.msg import (
 class DetectionLogger(Node):
 
     def __init__(self):
-        super().__init__('detection_logger_node')
+        super().__init__("detection_logger_node")
         # Optional scenario name (e.g. "S1", "S2")
-        self.declare_parameter('scenario_name', 'unknown')
+        self.declare_parameter("scenario_name", "unknown")
         self.scenario_name = (
-            self.get_parameter('scenario_name').get_parameter_value().string_value
+            self.get_parameter("scenario_name").get_parameter_value().string_value
         )
 
         # Directory + timestamp for filenames
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        log_dir = 'test_logs'
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_dir = "test_logs"
         os.makedirs(log_dir, exist_ok=True)
 
         # -----------------------
@@ -51,67 +52,82 @@ class DetectionLogger(Node):
 
         # Raw camera / radar detections
         self.raw_file = open(
-            os.path.join(log_dir, f'raw_detections_{self.scenario_name}.csv'),
-            'w', newline=''
+            os.path.join(log_dir, f"raw_detections_{self.scenario_name}.csv"),
+            "w",
+            newline="",
         )
         self.raw_writer = csv.writer(self.raw_file)
-        self.raw_writer.writerow([
-            'sensor_type',          # "radar" or "camera"
-            'logger_stamp',         # arrival to logger
-            'header_stamp',         # detection timestamp
-            'x', 'y', 'z',          # position
-            f'Simulation was run at: {timestamp}',
-        ])
+        self.raw_writer.writerow(
+            [
+                "sensor_type",  # "radar" or "camera"
+                "logger_stamp",  # arrival to logger
+                "header_stamp",  # detection timestamp
+                "x",
+                "y",
+                "z",  # position
+                f"Simulation was run at: {timestamp}",
+            ]
+        )
 
         # Fused detections
         self.fused_file = open(
-            os.path.join(log_dir, f'fused_detections_{self.scenario_name}.csv'),
-            'w', newline=''
+            os.path.join(log_dir, f"fused_detections_{self.scenario_name}.csv"),
+            "w",
+            newline="",
         )
         self.fused_writer = csv.writer(self.fused_file)
-        self.fused_writer.writerow([
-            'logger_stamp',         # arrival to logger
-            'header_stamp',         # detection timestamp
-            'detection_type',       # "fused" / "camera" / "radar"
-            'x', 'y', 'z',          # position
-            'distance',             # distance to ego
-            'speed',                # speed of the detected object
-            f'Simulation was run at: {timestamp}',
-        ])
+        self.fused_writer.writerow(
+            [
+                "logger_stamp",  # arrival to logger
+                "header_stamp",  # detection timestamp
+                "detection_type",  # "fused" / "camera" / "radar"
+                "x",
+                "y",
+                "z",  # position
+                "distance",  # distance to ego
+                "speed",  # speed of the detected object
+                f"Simulation was run at: {timestamp}",
+            ]
+        )
 
         # Tracks
         self.tracks_file = open(
-            os.path.join(log_dir, f'tracks_{self.scenario_name}.csv'),
-            'w', newline=''
+            os.path.join(log_dir, f"tracks_{self.scenario_name}.csv"), "w", newline=""
         )
         self.tracks_writer = csv.writer(self.tracks_file)
-        self.tracks_writer.writerow([
-            'logger_stamp',         # arrival to logger
-            'header_stamp',         # track message timestamp
-            'tracking_id',          # unique track ID
-            'x', 'y', 'z',          # position
-            'distance',             # distance to ego
-            'speed',                # speed of the tracked object (ego-compensated)
-            'age',                  # number of frames since track was created
-            'consecutive_misses',   # number of consecutive misses for the track
-            f'Simulation was run at: {timestamp}',
-        ])
+        self.tracks_writer.writerow(
+            [
+                "logger_stamp",  # arrival to logger
+                "header_stamp",  # track message timestamp
+                "tracking_id",  # unique track ID
+                "x",
+                "y",
+                "z",  # position
+                "distance",  # distance to ego
+                "speed",  # speed of the tracked object (ego-compensated)
+                "age",  # number of frames since track was created
+                "consecutive_misses",  # number of consecutive misses for the track
+                f"Simulation was run at: {timestamp}",
+            ]
+        )
 
         # Ego ground truth (odometry)
         self.ego_file = open(
-            os.path.join(log_dir, f'ego_odom_{self.scenario_name}.csv'),
-            'w', newline=''
+            os.path.join(log_dir, f"ego_odom_{self.scenario_name}.csv"), "w", newline=""
         )
         self.ego_writer = csv.writer(self.ego_file)
-        self.ego_writer.writerow([
-            'logger_stamp',         # arrival to logger
-            'header_stamp',         # odom message timestamp
-            'x', 'y',               # position
-            'yaw',                  # orientation
-            'v',                    # forward speed
-            'yaw_rate',             # yaw rate
-            f'Simulation was run at: {timestamp}',
-        ])
+        self.ego_writer.writerow(
+            [
+                "logger_stamp",  # arrival to logger
+                "header_stamp",  # odom message timestamp
+                "x",
+                "y",  # position
+                "yaw",  # orientation
+                "v",  # forward speed
+                "yaw_rate",  # yaw rate
+                f"Simulation was run at: {timestamp}",
+            ]
+        )
 
         # -----------------------
         # Subscriptions
@@ -119,26 +135,24 @@ class DetectionLogger(Node):
 
         # Raw detections
         self.create_subscription(
-            RadarDetection, '/radar_detections', self.handle_radar, 10
+            RadarDetection, "/radar_detections", self.handle_radar, 10
         )
         self.create_subscription(
-            CameraDetection, '/camera_detections', self.handle_camera, 10
+            CameraDetection, "/camera_detections", self.handle_camera, 10
         )
 
         # Fused detections (from fusion node)
         self.create_subscription(
-            FusedDetection, '/fused_detections', self.handle_fused, 10
+            FusedDetection, "/fused_detections", self.handle_fused, 10
         )
 
         # Tracks (from tracker node)
         self.create_subscription(
-            FusedDetectionArray, '/tracked_detections', self.handle_track, 50
+            FusedDetectionArray, "/tracked_detections", self.handle_track, 50
         )
 
         # Ego odom (from Gazebo bridge)
-        self.create_subscription(
-            Odometry, '/odom', self.handle_odom, 20
-        )
+        self.create_subscription(Odometry, "/odom", self.handle_odom, 20)
 
         self.get_logger().info(
             f'DetectionLogger started, logging to "{log_dir}" '
@@ -165,58 +179,66 @@ class DetectionLogger(Node):
     def handle_radar(self, msg: RadarDetection):
         header_time = self._stamp_to_seconds(msg.header.stamp)
         logger_time = self._get_current_time()
-        self.raw_writer.writerow([
-            'radar',
-            logger_time,
-            header_time,
-            msg.position.x,
-            msg.position.y,
-            msg.position.z,
-        ])
+        self.raw_writer.writerow(
+            [
+                "radar",
+                logger_time,
+                header_time,
+                msg.position.x,
+                msg.position.y,
+                msg.position.z,
+            ]
+        )
 
     def handle_camera(self, msg: CameraDetection):
         header_time = self._stamp_to_seconds(msg.header.stamp)
         logger_time = self._get_current_time()
-        self.raw_writer.writerow([
-            'camera',
-            logger_time,
-            header_time,
-            msg.position.x,
-            msg.position.y,
-            msg.position.z,
-        ])
+        self.raw_writer.writerow(
+            [
+                "camera",
+                logger_time,
+                header_time,
+                msg.position.x,
+                msg.position.y,
+                msg.position.z,
+            ]
+        )
 
     def handle_fused(self, msg: FusedDetection):
         header_time = self._stamp_to_seconds(msg.header.stamp)
         logger_time = self._get_current_time()
-        self.fused_writer.writerow([
-            logger_time,
-            header_time,
-            msg.detection_type,
-            msg.position.x,
-            msg.position.y,
-            msg.position.z,
-            msg.distance,
-            msg.speed,
-        ])
+        self.fused_writer.writerow(
+            [
+                logger_time,
+                header_time,
+                msg.detection_type,
+                msg.position.x,
+                msg.position.y,
+                msg.position.z,
+                msg.distance,
+                msg.speed,
+            ]
+        )
 
     def handle_track(self, msg: FusedDetectionArray):
         """Tracks published by KF tracker as FusedDetectionArray messages."""
         for msg in msg.detections:
             header_time = self._stamp_to_seconds(msg.header.stamp)
             logger_time = self._get_current_time()
-            self.tracks_writer.writerow([
-                logger_time,
-                header_time,
-                msg.tracking_id,
-                msg.position.x,
-                msg.position.y,
-                msg.position.z,
-                msg.distance,
-                msg.speed,
-                msg.age,
-                msg.consecutive_misses,
-            ])
+            self.tracks_writer.writerow(
+                [
+                    logger_time,
+                    header_time,
+                    msg.tracking_id,
+                    msg.position.x,
+                    msg.position.y,
+                    msg.position.z,
+                    msg.distance,
+                    msg.speed,
+                    msg.age,
+                    msg.consecutive_misses,
+                ]
+            )
 
     def handle_odom(self, msg: Odometry):
         header_time = self._stamp_to_seconds(msg.header.stamp)
@@ -236,14 +258,17 @@ class DetectionLogger(Node):
         v = msg.twist.twist.linear.x
         yaw_rate = msg.twist.twist.angular.z
 
-        self.ego_writer.writerow([
-            logger_time,
-            header_time,
-            x, y,
-            yaw,
-            v,
-            yaw_rate,
-        ])
+        self.ego_writer.writerow(
+            [
+                logger_time,
+                header_time,
+                x,
+                y,
+                yaw,
+                v,
+                yaw_rate,
+            ]
+        )
 
     # -----------------------
     # Cleanup
@@ -252,10 +277,10 @@ class DetectionLogger(Node):
     def destroy_node(self):
         # Close all files cleanly
         for f in [
-            getattr(self, 'raw_file', None),
-            getattr(self, 'fused_file', None),
-            getattr(self, 'tracks_file', None),
-            getattr(self, 'ego_file', None),
+            getattr(self, "raw_file", None),
+            getattr(self, "fused_file", None),
+            getattr(self, "tracks_file", None),
+            getattr(self, "ego_file", None),
         ]:
             if f is not None:
                 try:
@@ -274,5 +299,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

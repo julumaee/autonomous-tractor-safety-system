@@ -32,6 +32,7 @@
   <exec_depend>navigation_interface</exec_depend>
   <exec_depend>tractor_control</exec_depend>
   <exec_depend>tractor_safety_system_interfaces</exec_depend>
+  <exec_depend>tractor_safety_system_launch</exec_depend>
 
   <!-- Test deps -->
   <test_depend>ament_copyright</test_depend>

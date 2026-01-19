@@ -14,27 +14,24 @@
 
 import math
 
-from geometry_msgs.msg import TwistWithCovarianceStamped as TWCS
 import numpy as np
 import rclpy
+from geometry_msgs.msg import TwistWithCovarianceStamped as TWCS
 from rclpy.node import Node
-from tractor_safety_system_interfaces.msg import (
-    FusedDetection,
-    FusedDetectionArray
-)
+
+from tractor_safety_system_interfaces.msg import FusedDetection, FusedDetectionArray
 
 
 def rot2d(theta):
     c, s = math.cos(theta), math.sin(theta)
-    return np.array([[c, -s],
-                     [s,  c]], dtype=float)
+    return np.array([[c, -s], [s, c]], dtype=float)
 
 
 class Track:
-    __slots__ = ('x', 'P', 'age', 'hits', 'miss', 'id', 'last_stamp', 'was_updated')
+    __slots__ = ("x", "P", "age", "hits", "miss", "id", "last_stamp", "was_updated")
 
     def __init__(self, x0, P0, stamp, tid):
-        self.x = x0.copy()      # [x, y, vx, vy]
+        self.x = x0.copy()  # [x, y, vx, vy]
         self.P = P0.copy()
         self.age = 1
         self.hits = 1
@@ -47,46 +44,52 @@ class Track:
 class EgoKFTracker(Node):
 
     def __init__(self):
-        super().__init__('ego_kf_tracker')
+        super().__init__("ego_kf_tracker")
 
         # --- Control->vehicle parameters
-        self.declare_parameter('wheelbase', 2.5)
-        self.declare_parameter('steer_unit_per_rad', 180.0/math.pi)  # int units per rad
-        self.declare_parameter('speed_unit_per_mps', 1.0)            # int units per m/s
-        self.declare_parameter('control_latency', 0.10)              # seconds
-        self.declare_parameter('max_yaw_rate', 1.0)                  # rad/s safety clamp
+        self.declare_parameter("wheelbase", 2.5)
+        self.declare_parameter(
+            "steer_unit_per_rad", 180.0 / math.pi
+        )  # int units per rad
+        self.declare_parameter("speed_unit_per_mps", 1.0)  # int units per m/s
+        self.declare_parameter("control_latency", 0.10)  # seconds
+        self.declare_parameter("max_yaw_rate", 1.0)  # rad/s safety clamp
 
         # --- KF modelling
-        self.declare_parameter('sigma_accel', 3.0)    # m/s^2 (constant-accel white noise)
-        self.declare_parameter('R_meas_xy', 0.3)      # m std for fused measurement (per-axis)
-        self.declare_parameter('gate_chi2', 10.597)   # 99.5% in 2D
+        self.declare_parameter("sigma_accel", 3.0)  # m/s^2 (constant-accel white noise)
+        self.declare_parameter(
+            "R_meas_xy", 0.3
+        )  # m std for fused measurement (per-axis)
+        self.declare_parameter("gate_chi2", 10.597)  # 99.5% in 2D
 
         # --- Track mgmt
-        self.declare_parameter('spawn_hits', 3)          # how many hits to confirm a track
-        self.declare_parameter('spawn_hit_ratio', 0.75)  # min ratio of hits to age to confirm
-        self.declare_parameter('max_miss', 10)           # max consecutive misses before deletion
-        self.declare_parameter('init_speed_std', 3.0)    # m/s initial std on velocity
-        self.declare_parameter('update_rate', 20.0)      # Hz
-        self.declare_parameter('enable_ego_drag', True)
+        self.declare_parameter("spawn_hits", 3)  # how many hits to confirm a track
+        self.declare_parameter(
+            "spawn_hit_ratio", 0.75
+        )  # min ratio of hits to age to confirm
+        self.declare_parameter("max_miss", 10)  # max consecutive misses before deletion
+        self.declare_parameter("init_speed_std", 3.0)  # m/s initial std on velocity
+        self.declare_parameter("update_rate", 20.0)  # Hz
+        self.declare_parameter("enable_ego_drag", True)
 
         # Read params
-        self.L = float(self.get_parameter('wheelbase').value)
-        self.k_steer = float(self.get_parameter('steer_unit_per_rad').value)
-        self.k_speed = float(self.get_parameter('speed_unit_per_mps').value)
-        self.control_latency = float(self.get_parameter('control_latency').value)
-        self.max_yaw_rate = float(self.get_parameter('max_yaw_rate').value)
+        self.L = float(self.get_parameter("wheelbase").value)
+        self.k_steer = float(self.get_parameter("steer_unit_per_rad").value)
+        self.k_speed = float(self.get_parameter("speed_unit_per_mps").value)
+        self.control_latency = float(self.get_parameter("control_latency").value)
+        self.max_yaw_rate = float(self.get_parameter("max_yaw_rate").value)
 
-        self.sigma_accel = float(self.get_parameter('sigma_accel').value)
-        self.R_meas = (float(self.get_parameter('R_meas_xy').value)**2) * np.eye(2)
-        self.gate_chi2 = float(self.get_parameter('gate_chi2').value)
+        self.sigma_accel = float(self.get_parameter("sigma_accel").value)
+        self.R_meas = (float(self.get_parameter("R_meas_xy").value) ** 2) * np.eye(2)
+        self.gate_chi2 = float(self.get_parameter("gate_chi2").value)
 
-        self.spawn_hits = int(self.get_parameter('spawn_hits').value)
-        self.spawn_hit_ratio = float(self.get_parameter('spawn_hit_ratio').value)
-        self.max_miss = int(self.get_parameter('max_miss').value)
-        self.init_speed_std = float(self.get_parameter('init_speed_std').value)
+        self.spawn_hits = int(self.get_parameter("spawn_hits").value)
+        self.spawn_hit_ratio = float(self.get_parameter("spawn_hit_ratio").value)
+        self.max_miss = int(self.get_parameter("max_miss").value)
+        self.init_speed_std = float(self.get_parameter("init_speed_std").value)
 
-        self.dt_nom = 1.0/float(self.get_parameter('update_rate').value)
-        self.enable_ego_drag = bool(self.get_parameter('enable_ego_drag').value)
+        self.dt_nom = 1.0 / float(self.get_parameter("update_rate").value)
+        self.enable_ego_drag = bool(self.get_parameter("enable_ego_drag").value)
 
         self.ego_x = 0.0
         self.ego_y = 0.0
@@ -94,27 +97,31 @@ class EgoKFTracker(Node):
 
         # Subscriptions
         self.sub_det = self.create_subscription(
-            FusedDetection, '/fused_detections', self.on_detection, 50)
+            FusedDetection, "/fused_detections", self.on_detection, 50
+        )
         self.sub_odom = self.create_subscription(
-            TWCS, '/ego_motion', self.on_ego_odom, 100)
+            TWCS, "/ego_motion", self.on_ego_odom, 100
+        )
 
         # Publisher
-        self.pub_tracks = self.create_publisher(FusedDetectionArray, '/tracked_detections', 50)
+        self.pub_tracks = self.create_publisher(
+            FusedDetectionArray, "/tracked_detections", 50
+        )
 
         # Timer loop
         self.timer = self.create_timer(self.dt_nom, self.on_timer)
 
         # Internal state
-        self.tracks = []     # list[Track]
+        self.tracks = []  # list[Track]
         self.next_id = 1
         self.last_timer_stamp = None
 
         # Latest motion
-        self.u_v = 0.0       # m/s
-        self.u_delta = 0.0   # rad
+        self.u_v = 0.0  # m/s
+        self.u_delta = 0.0  # rad
         self.u_stamp = None
 
-        self.get_logger().info('KF tracker running.')
+        self.get_logger().info("KF tracker running.")
 
     # ------------------ Inputs ------------------
 
@@ -126,7 +133,7 @@ class EgoKFTracker(Node):
         source = msg.detection_type
         # store immediately in a small buffer for this cycle
         # Simple approach: push onto a list; the timer will consume and clear.
-        if not hasattr(self, '_meas_buf'):
+        if not hasattr(self, "_meas_buf"):
             self._meas_buf = []
         self._meas_buf.append((position_world, self.R_meas, stamp, source))
 
@@ -134,7 +141,9 @@ class EgoKFTracker(Node):
         """Receive ego vehicle twist (body frame)."""
         self.u_v = float(twist_msg.twist.twist.linear.x)
         self.u_delta = float(twist_msg.twist.twist.angular.z)
-        self.u_stamp = twist_msg.header.stamp.sec + twist_msg.header.stamp.nanosec * 1e-9
+        self.u_stamp = (
+            twist_msg.header.stamp.sec + twist_msg.header.stamp.nanosec * 1e-9
+        )
 
     def publish_tracks(self):
         """Publish confirmed tracks in ego (base_link) frame."""
@@ -146,7 +155,7 @@ class EgoKFTracker(Node):
                 continue  # only publish confirmed
             msg = FusedDetection()
             msg.header.stamp = tr.last_stamp
-            msg.header.frame_id = 'base_link'
+            msg.header.frame_id = "base_link"
             position_ego = self.world_to_ego_pos(tr.x[0:2])
             velocity_ego = self.world_to_ego_vel(tr.x[2:4])
             msg.position.x = float(position_ego[0])
@@ -157,8 +166,8 @@ class EgoKFTracker(Node):
             vy = float(velocity_ego[1])
             msg.speed = float(np.hypot(vx, vy))
             msg.is_tracking = True
-            msg.tracking_id = f'object_{tr.id}'
-            msg.detection_type = 'tracked'
+            msg.tracking_id = f"object_{tr.id}"
+            msg.detection_type = "tracked"
             msg.age = tr.age
             msg.consecutive_misses = tr.miss
             track_array.detections.append(msg)
@@ -174,7 +183,7 @@ class EgoKFTracker(Node):
         if dt <= 0.0:
             return
 
-        v = float(self.u_v)        # forward speed in base_link
+        v = float(self.u_v)  # forward speed in base_link
         yaw_rate = float(self.u_delta)  # THIS IS YAW RATE [rad/s], NOT steering angle
 
         # small-step integration in ego/body frame
@@ -201,8 +210,7 @@ class EgoKFTracker(Node):
         """
         c = math.cos(self.ego_yaw)
         s = math.sin(self.ego_yaw)
-        R = np.array([[c, -s],
-                      [s,  c]], dtype=float)
+        R = np.array([[c, -s], [s, c]], dtype=float)
         t = np.array([self.ego_x, self.ego_y], dtype=float)
         return t + R @ p_ego
 
@@ -214,8 +222,7 @@ class EgoKFTracker(Node):
         """
         c = math.cos(self.ego_yaw)
         s = math.sin(self.ego_yaw)
-        R_T = np.array([[c, s],
-                        [-s, c]], dtype=float)
+        R_T = np.array([[c, s], [-s, c]], dtype=float)
         t = np.array([self.ego_x, self.ego_y], dtype=float)
         return R_T @ (p_world - t)
 
@@ -227,16 +234,14 @@ class EgoKFTracker(Node):
         """
         c = math.cos(self.ego_yaw)
         s = math.sin(self.ego_yaw)
-        R = np.array([[c, -s],
-                      [s,  c]], dtype=float)
+        R = np.array([[c, -s], [s, c]], dtype=float)
         return R @ v_ego
 
     def world_to_ego_vel(self, v_world: np.ndarray) -> np.ndarray:
         """Convert a 2D velocity from world frame to ego frame."""
         c = math.cos(self.ego_yaw)
         s = math.sin(self.ego_yaw)
-        R_T = np.array([[c, s],
-                        [-s, c]], dtype=float)
+        R_T = np.array([[c, s], [-s, c]], dtype=float)
         return R_T @ v_world
 
     def on_timer(self):
@@ -265,7 +270,7 @@ class EgoKFTracker(Node):
                 tr.was_updated = False
 
         # 3. Data association & updates using buffered detections
-        meas = getattr(self, '_meas_buf', [])
+        meas = getattr(self, "_meas_buf", [])
         if meas:
             self.associate_and_update(meas)
             self._meas_buf.clear()
@@ -287,8 +292,8 @@ class EgoKFTracker(Node):
     def integrate_twist(v, yaw_rate, dt):
         """Dead-reckon pose change over dt given body-frame twist."""
         # motion expressed in the *previous* body frame
-        dx = v * dt         # move forward in body x
-        dy = 0.0            # no lateral motion in body frame
+        dx = v * dt  # move forward in body x
+        dy = 0.0  # no lateral motion in body frame
         dth = yaw_rate * dt  # heading change
 
         return dx, dy, dth
@@ -300,16 +305,20 @@ class EgoKFTracker(Node):
         # Constant-velocity model with discrete white accel noise
         a = self.sigma_accel  # Acceleration std
         # State transition matrix:
-        F = np.array([[1, 0, dt, 0],
-                      [0, 1, 0, dt],
-                      [0, 0, 1, 0],
-                      [0, 0, 0, 1]], dtype=float)
-        q = a*a  # Acceleration variance
+        F = np.array(
+            [[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]], dtype=float
+        )
+        q = a * a  # Acceleration variance
         # Process noise covariance:
-        Q = q * np.array([[dt**4/4,     0, dt**3/2,    0],
-                          [0,     dt**4/4,    0, dt**3/2],
-                          [dt**3/2,     0,   dt**2,    0],
-                          [0,     dt**3/2,    0,   dt**2]], dtype=float)
+        Q = q * np.array(
+            [
+                [dt**4 / 4, 0, dt**3 / 2, 0],
+                [0, dt**4 / 4, 0, dt**3 / 2],
+                [dt**3 / 2, 0, dt**2, 0],
+                [0, dt**3 / 2, 0, dt**2],
+            ],
+            dtype=float,
+        )
         # Predict all tracks
         for tr in self.tracks:
             tr.x = F @ tr.x
@@ -320,7 +329,7 @@ class EgoKFTracker(Node):
         """KF update step for a single track with one measurement."""
         # KF update
         y = position - H @ tr.x  # Innovation
-        S = H @ tr.P @ H.T + Rm   # Innovation covariance
+        S = H @ tr.P @ H.T + Rm  # Innovation covariance
         K = tr.P @ H.T @ np.linalg.inv(S)  # Kalman gain
         identity = np.eye(4, dtype=float)
 
@@ -343,7 +352,7 @@ class EgoKFTracker(Node):
         H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
 
         # Sort detection array
-        order = {'fused': 0, 'camera': 1, 'radar': 2}
+        order = {"fused": 0, "camera": 1, "radar": 2}
         meas_list.reverse()  # Newest first
         # Sort based on type priority (fused > camera > radar)
         meas_list.sort(key=lambda d: order.get(str(d[3]).casefold().strip(), 99))
@@ -404,7 +413,11 @@ class EgoKFTracker(Node):
             alive = tr.miss <= self.max_miss
             if confirmed and alive:
                 kept.append(tr)
-            elif not confirmed and alive and tr.age * self.spawn_hit_ratio <= self.spawn_hits:
+            elif (
+                not confirmed
+                and alive
+                and tr.age * self.spawn_hit_ratio <= self.spawn_hits
+            ):
                 # brief grace for newborns
                 kept.append(tr)
         self.tracks = kept
@@ -421,5 +434,5 @@ def main():
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

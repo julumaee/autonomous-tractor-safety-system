@@ -21,14 +21,14 @@ import pandas as pd
 
 # Adjust this import to match your actual file name:
 # from analyze_scenarios import ...
+from analyze_scenario import compute_error_stats  # make sure you've added this
 from analyze_scenario import (
-    AnalysisConfig,
     STATIC_GT_WORLD,
-    make_ego_interpolator,
+    AnalysisConfig,
     compute_gt_presence_times,
     detection_metrics_from_df,
+    make_ego_interpolator,
     track_metrics_from_df,
-    compute_error_stats,  # make sure you've added this
 )
 
 

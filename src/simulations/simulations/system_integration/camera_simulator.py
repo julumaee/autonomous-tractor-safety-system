@@ -14,64 +14,84 @@
 
 import random
 
-from depthai_ros_msgs.msg import SpatialDetection, SpatialDetectionArray
-from geometry_msgs.msg import Point
 import rclpy
+from geometry_msgs.msg import Point
 from rclpy.node import Node
 from std_msgs.msg import Header
+from vision_msgs.msg import (
+    BoundingBox2D,
+    Detection3D,
+    Detection3DArray,
+    ObjectHypothesis,
+    ObjectHypothesisWithPose,
+)
+
 from tractor_safety_system_interfaces.msg import SimulatedObject
-from vision_msgs.msg import BoundingBox2D, ObjectHypothesis
 
 
 class CameraSimulator(Node):
 
     def __init__(self):
-        super().__init__('camera_simulator')
-        self.publisher_ = self.create_publisher(SpatialDetectionArray,
-                                                '/color/yolov4_Spatial_detections',
-                                                10)
+        super().__init__("camera_simulator")
+        self.publisher_ = self.create_publisher(
+            Detection3DArray, "/oak/nn/spatial_detections", 10
+        )
         self.object_subscription = self.create_subscription(
-            SimulatedObject,
-            '/simulated_objects',
-            self.simulate_detection,
-            10)
+            SimulatedObject, "/simulated_objects", self.simulate_detection, 10
+        )
 
     def simulate_detection(self, simulated_object):
         """Simulate detections and publish them as a SpatialDetectionArray message."""
-        # Create a simulated SpatialDetectionArray message with 2 detections
-        distance = (simulated_object.position.x ** 2 + simulated_object.position.y ** 2) ** 0.5
+        # Create a simulated Detection3DArray message with one detection
+        distance = (
+            simulated_object.position.x**2 + simulated_object.position.y**2
+        ) ** 0.5
         if distance > 15:
-            self.get_logger().info(f'Object is too far away: {distance}m')
+            self.get_logger().info(f"Object is too far away: {distance}m")
         else:
-            detection_array = SpatialDetectionArray()
+            detection_array = Detection3DArray()
             detection_array.header = Header()
             detection_array.header.stamp = self.get_clock().now().to_msg()
-            detection_array.header.frame_id = 'oakd_camera_frame'
+            detection_array.header.frame_id = "oakd_camera_frame"
 
-            detection = SpatialDetection()
+            detection = Detection3D()
             detection.results = []
-            detection.results = self.generate_object_hypotheses()
-            detection.bbox = self.generate_bounding_box()  # TODO Should match the position?
-            camera_position = Point(x=-simulated_object.position.y,
-                                    y=-simulated_object.position.z,
-                                    z=simulated_object.position.x
-                                    )
-            detection.position = camera_position
+            # Create ObjectHypothesisWithPose from ObjectHypothesis
+            result_with_pose = ObjectHypothesisWithPose()
+            result_with_pose.hypothesis = self.generate_object_hypothesis()
+            # Set pose position to match the detection position
+            camera_position = Point(
+                x=-simulated_object.position.y,
+                y=-simulated_object.position.z,
+                z=simulated_object.position.x,
+            )
+            result_with_pose.pose.pose.position = camera_position
+            detection.results = [result_with_pose]
+            
+            detection.bbox = (
+                self.generate_bounding_box()
+            )
+            
             detection.is_tracking = random.choice([True, False])
-            if (detection.is_tracking):
-                detection.tracking_id = f'object_{simulated_object.object_id}'
-            detection_array.detections.append(detection)  # Add detection to the array
+            if detection.is_tracking:
+                detection.tracking_id = f"object_{simulated_object.object_id}"
+
+            # Add detection to the array
+            detection_array.detections.append(detection)
 
             # Publish the message
             self.publisher_.publish(detection_array)
-            self.get_logger().info(f'Published a detection as {detection_array.header.frame_id}')
+            self.get_logger().info(
+                f"Published a detection as {detection_array.header.frame_id}"
+            )
 
     @staticmethod
-    def generate_object_hypotheses():
-        """Generate two simulated object hypotheses."""
-        hypothesis1 = ObjectHypothesis(class_id='person', score=random.uniform(0.7, 0.95))
-        hypothesis2 = ObjectHypothesis(class_id='car', score=random.uniform(0.4, 0.6))
-        return [hypothesis1, hypothesis2]
+    def generate_object_hypothesis():
+        """Generate a simulated object hypothesis."""
+        hypothesis = ObjectHypothesis(
+            class_id="person", score=random.uniform(0.7, 0.95)
+        )
+        return hypothesis
 
     @staticmethod
     def generate_bounding_box():
@@ -84,15 +104,6 @@ class CameraSimulator(Node):
         bbox.size_y = random.uniform(50, 150)
         return bbox
 
-    @staticmethod
-    def generate_position():
-        """Generate a random 3D position."""
-        position = Point()
-        position.x = random.uniform(1.0, 15.0)  # Depth
-        position.y = random.uniform(-5.0, 5.0)  # Left-Right
-        position.z = random.uniform(-0.0, 0.0)  # Up-Down
-        return position
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -102,5 +113,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -12,28 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from geometry_msgs.msg import Twist
 import rclpy
+from geometry_msgs.msg import Twist
 from rclpy.node import Node
 
 
 class ScriptedDriver(Node):
 
     def __init__(self):
-        super().__init__('scripted_driver')
+        super().__init__("scripted_driver")
 
         # Parameters
-        self.declare_parameter('scenario_name', 'S1')
-        self.declare_parameter('cmd_topic', '/vehicle_cmd_vel')
+        self.declare_parameter("scenario_name", "S1")
+        self.declare_parameter("cmd_topic", "/vehicle_cmd_vel")
 
         self.scenario_name = (
-            self.get_parameter('scenario_name')
-                .get_parameter_value().string_value
+            self.get_parameter("scenario_name").get_parameter_value().string_value
         )
-        cmd_topic = (
-            self.get_parameter('cmd_topic')
-                .get_parameter_value().string_value
-        )
+        cmd_topic = self.get_parameter("cmd_topic").get_parameter_value().string_value
 
         self.get_logger().info(
             f'Starting scripted driver for scenario "{self.scenario_name}" '
@@ -63,46 +59,46 @@ class ScriptedDriver(Node):
         self.timer = self.create_timer(0.05, self.on_timer)
 
     def _build_segments(self, scenario: str):
-        if scenario == 'S1':
+        if scenario == "S1":
             # S1: drive straight towards a static pedestrian.
             return [
-                (3.0, 0.0, 0.0),   # stand still 3 s (for setup)
+                (3.0, 0.0, 0.0),  # stand still 3 s (for setup)
                 (14.0, 2.0, 0.0),  # drive straight 14 s
-                (3.0, 0.0, 0.0),   # stand still
+                (3.0, 0.0, 0.0),  # stand still
             ]
-        elif scenario == 'S2':
+        elif scenario == "S2":
             # S2: straight line past multiple static pedestrians
             return [
-                (3.0, 0.0, 0.0),   # stand still 3 s (for setup)
+                (3.0, 0.0, 0.0),  # stand still 3 s (for setup)
                 (30.0, 1.0, 0.0),  # drive straight 30 s
-                (3.0, 0.0, 0.0),   # stand still
+                (3.0, 0.0, 0.0),  # stand still
             ]
-        elif scenario == 'S3':
+        elif scenario == "S3":
             # S3: Pedestrians crossing in front of the vehicle
             return [
                 (20.0, 0.0, 0.0),  # stand still 20 s (wait for pedestrians to cross)
             ]
-        elif scenario == 'S4':
+        elif scenario == "S4":
             # S4: approach three pedestrians with an s-shaped path
             # radius r = v / omega  => choose v, omega accordingly
             v = 1.0
-            omega = 0.3          # ~3.3 m radius
+            omega = 0.3  # ~3.3 m radius
             circle_time = 1.5
             return [
-                (3.0, 0.0, 0.0),              # Stand still
-                (0.5*circle_time, v, omega),  # Curve left
-                (circle_time, v, -omega),     # Curve right
-                (circle_time, v, omega),      # Curve left
-                (circle_time, v, -omega),     # Curve right
-                (circle_time, v, omega),      # Curve left
-                (circle_time, v, -omega),     # Curve right
-                (circle_time, v, omega),      # Curve left
-                (circle_time, v, -omega),     # Curve right
-                (circle_time, v, omega),      # Curve left
-                (circle_time, v, -omega),     # Curve right
-                (circle_time, v, omega),      # Curve left
-                (circle_time, v, -omega),     # Curve right
-                (3.0, 0.0, 0.0),              # Stop
+                (3.0, 0.0, 0.0),  # Stand still
+                (0.5 * circle_time, v, omega),  # Curve left
+                (circle_time, v, -omega),  # Curve right
+                (circle_time, v, omega),  # Curve left
+                (circle_time, v, -omega),  # Curve right
+                (circle_time, v, omega),  # Curve left
+                (circle_time, v, -omega),  # Curve right
+                (circle_time, v, omega),  # Curve left
+                (circle_time, v, -omega),  # Curve right
+                (circle_time, v, omega),  # Curve left
+                (circle_time, v, -omega),  # Curve right
+                (circle_time, v, omega),  # Curve left
+                (circle_time, v, -omega),  # Curve right
+                (3.0, 0.0, 0.0),  # Stop
             ]
         else:
             self.get_logger().warn(
@@ -130,7 +126,7 @@ class ScriptedDriver(Node):
             cmd = Twist()
             self.pub_cmd.publish(cmd)
             # Log once and exit the process
-            self.get_logger().info('Scenario finished, stopping scripted driver.')
+            self.get_logger().info("Scenario finished, stopping scripted driver.")
             # Cancel the timer so we don't get called again
             self.timer.cancel()
             # Exit the process – launch will see this
@@ -162,5 +158,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

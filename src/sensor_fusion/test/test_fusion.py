@@ -36,11 +36,12 @@
 
 import unittest
 
-from geometry_msgs.msg import Point
 import numpy as np
 import rclpy
-from sensor_fusion.fusion_node import FusionNode
+from geometry_msgs.msg import Point
 from std_msgs.msg import Header
+
+from sensor_fusion.fusion_node import FusionNode
 from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 
 
@@ -90,9 +91,9 @@ class TestFusionNode(unittest.TestCase):
     def test_fusion_performs_correctly(self):
         """Ensure that radar and camera detections are correctly fused and published."""
         camera_msg = self.create_camera_detection(12.0, 3.0, 0.0)
-        radar_msg = self.create_radar_detection(12.0, 3.0, 0.0,
-                                                distance=np.sqrt(12.0**2 + 3.0**2),
-                                                speed=2)
+        radar_msg = self.create_radar_detection(
+            12.0, 3.0, 0.0, distance=np.sqrt(12.0**2 + 3.0**2), speed=2
+        )
 
         # Add detections to the fusion node
         self.fusion_node.camera_detections.append(camera_msg)
@@ -102,23 +103,42 @@ class TestFusionNode(unittest.TestCase):
         self.fusion_node.attempt_fusion()
 
         # Check if fusion was published
-        self.assertEqual(len(self.published_fusions), 1,
-                         msg='Fusion should have been published once.')
+        self.assertEqual(
+            len(self.published_fusions),
+            1,
+            msg="Fusion should have been published once.",
+        )
 
         # Verify that the fused detection has expected values
         fused_detection = self.published_fusions[0]
 
-        self.assertEqual(fused_detection.detection_type, 'fused',
-                         msg='Detection type should be fused')
-        self.assertAlmostEqual(fused_detection.position.x, radar_msg.position.x, places=1,
-                               msg='Fused position X should match true position')
-        self.assertAlmostEqual(fused_detection.position.y, radar_msg.position.y, places=1,
-                               msg='Fused position Y should match true position')
-        self.assertAlmostEqual(fused_detection.distance, radar_msg.distance, places=1,
-                               msg='Fused distance should match radar')
-        self.assertEqual(fused_detection.speed, radar_msg.speed,
-                         msg='Fused speed should match radar')
+        self.assertEqual(
+            fused_detection.detection_type,
+            "fused",
+            msg="Detection type should be fused",
+        )
+        self.assertAlmostEqual(
+            fused_detection.position.x,
+            radar_msg.position.x,
+            places=1,
+            msg="Fused position X should match true position",
+        )
+        self.assertAlmostEqual(
+            fused_detection.position.y,
+            radar_msg.position.y,
+            places=1,
+            msg="Fused position Y should match true position",
+        )
+        self.assertAlmostEqual(
+            fused_detection.distance,
+            radar_msg.distance,
+            places=1,
+            msg="Fused distance should match radar",
+        )
+        self.assertEqual(
+            fused_detection.speed, radar_msg.speed, msg="Fused speed should match radar"
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

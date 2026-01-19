@@ -1,0 +1,43 @@
+# Copyright 2025 Eemil Kulmala, University of Oulu
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Configuration file for OAK-D S2 camera with spatial YOLO object detection
+# This enables neural network-based object detection directly on the camera's VPU
+#
+# Usage:
+#   ros2 launch camera_interface oak_d_s2.launch.py \
+#       params_file:=/path/to/this/file.yaml \
+#       input_topic:=/oak/nn/spatial_detections
+#
+# Note: The node name below must match the camera_name launch argument
+# (default: 'oak'). If you use a different camera_name, update this file.
+
+/oak:
+  ros__parameters:
+    # Turn on sync across RGB/depth/NN
+    pipeline_gen.i_enable_sync: true
+    rgb.i_synced: true
+    stereo.i_synced: true
+
+    # Give the sync helper a little room to find matches
+    sync.sync_attempts: 10
+    sync.sync_threshold: 10
+
+    # Make NN outputs come with a passthrough image aligned to inference
+    nn.i_enable_passthrough: true
+    nn.i_disable_resize: true
+
+    # Match the preview behavior you saw
+    camera.i_enable_preview: true
+    camera.i_keep_preview_aspect_ratio: false

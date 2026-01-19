@@ -22,14 +22,13 @@ below in STATIC_GT_WORLD and are transformed into body frame using ego odometry.
 """
 
 import argparse
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
-import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
 
 # ------------------------------------------------------------------------------
 # Configuration: static ground-truth positions (world frame)
@@ -57,16 +56,19 @@ STATIC_GT_WORLD: Dict[str, List[Dict[str, float]]] = {
 
 @dataclass
 class AnalysisConfig:
-    max_assoc_dist: float = 1.5   # [m] maximum distance to associate detection to a static GT
+    max_assoc_dist: float = (
+        1.5  # [m] maximum distance to associate detection to a static GT
+    )
     use_header_time: bool = True  # use header_t for analysis timestamps
-    fov_x_min: float = 0.0        # [m] in front of tractor
-    fov_x_max: float = 30.0       # [m]
+    fov_x_min: float = 0.0  # [m] in front of tractor
+    fov_x_max: float = 30.0  # [m]
     fov_half_angle_deg: float = 60.0  # [deg] half-angle around +x
 
 
 # ------------------------------------------------------------------------------
 # Loading helpers
 # ------------------------------------------------------------------------------
+
 
 def load_raw_detections(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -86,14 +88,14 @@ def load_raw_detections(path: str) -> pd.DataFrame:
     df_radar = df[df["sensor_type"] == "radar"].copy()
     df_camera = df[df["sensor_type"] == "camera"].copy()
     # Transform radar coordinates
-    RADAR_TO_BODY_DX = 0.6   # from static TF
-    RADAR_TO_BODY_DY = 0.0   # assume centered
+    RADAR_TO_BODY_DX = 0.6  # from static TF
+    RADAR_TO_BODY_DY = 0.0  # assume centered
     if not df_radar.empty:
         df_radar["x"] = df_radar["x"] + RADAR_TO_BODY_DX
         df_radar["y"] = df_radar["y"] - RADAR_TO_BODY_DY
     # Transform camera coordinates
-    CAMERA_TO_BODY_DX = 0.5   # from static TF
-    CAMERA_TO_BODY_DY = 0.0   # assume centered
+    CAMERA_TO_BODY_DX = 0.5  # from static TF
+    CAMERA_TO_BODY_DY = 0.0  # assume centered
 
     if not df_camera.empty:
         old_x = df_camera["x"].to_numpy()
@@ -156,9 +158,11 @@ def load_ego(path: str) -> pd.DataFrame:
     df = df.sort_values("header_t")
     return df
 
+
 # ------------------------------------------------------------------------------
 # Ego pose interpolation and GT transform
 # ------------------------------------------------------------------------------
+
 
 def make_ego_interpolator(ego_df: pd.DataFrame) -> Tuple:
     """
@@ -170,6 +174,7 @@ def make_ego_interpolator(ego_df: pd.DataFrame) -> Tuple:
     y = ego_df["y"].values
     yaw_raw = ego_df["yaw"].values
     yaw_unwrapped = np.unwrap(yaw_raw)
+
     def x_ego(tq: np.ndarray) -> np.ndarray:
         return np.interp(tq, t, x)
 
@@ -180,6 +185,7 @@ def make_ego_interpolator(ego_df: pd.DataFrame) -> Tuple:
         return np.interp(tq, t, yaw_unwrapped)
 
     return x_ego, y_ego, yaw_ego
+
 
 def gt_static_body_positions_at_time(
     t: float,
@@ -214,9 +220,11 @@ def gt_static_body_positions_at_time(
         result.append((gt["id"], xb, yb))
     return result
 
+
 # ------------------------------------------------------------------------------
 # Metrics: association + MSE
 # ------------------------------------------------------------------------------
+
 
 def compute_gt_presence_on_grid(
     scenario: str,
@@ -244,7 +252,9 @@ def compute_gt_presence_on_grid(
     tan_theta = np.tan(theta)
 
     for t in time_grid:
-        gt_list = gt_static_body_positions_at_time(t, scenario, x_ego_fn, y_ego_fn, yaw_ego_fn)
+        gt_list = gt_static_body_positions_at_time(
+            t, scenario, x_ego_fn, y_ego_fn, yaw_ego_fn
+        )
         for gid, xb, yb in gt_list:
             # only consider objects in front of tractor
             if xb < cfg.fov_x_min or xb > cfg.fov_x_max:
@@ -258,6 +268,7 @@ def compute_gt_presence_on_grid(
 
     # convert lists to numpy arrays
     return {gid: np.asarray(ts) for gid, ts in presence.items()}
+
 
 def compute_error_stats(
     df_with_gt: pd.DataFrame,
@@ -311,9 +322,15 @@ def compute_error_stats(
         f"[{label}] RMSE={rmse:.3f} m; "
         + ", ".join([f"P(|e|<={r}m)={stats[f'p_within_{r:.2f}m']:.3f}" for r in radii])
         + ", "
-        + ", ".join([f"r_{int(q*100)}={stats[f'radius_q{int(q*100)}']:.3f} m" for q in quantiles])
+        + ", ".join(
+            [
+                f"r_{int(q*100)}={stats[f'radius_q{int(q*100)}']:.3f} m"
+                for q in quantiles
+            ]
+        )
     )
     return stats
+
 
 def detection_metrics_from_df(
     df_with_gt: pd.DataFrame,
@@ -392,7 +409,9 @@ def detection_metrics_from_df(
             recall_g = covered / presence_times.size
             recall_per_gt.append(recall_g)
 
-    metrics["recall_mean"] = float(np.mean(recall_per_gt)) if recall_per_gt else float("nan")
+    metrics["recall_mean"] = (
+        float(np.mean(recall_per_gt)) if recall_per_gt else float("nan")
+    )
 
     print(
         f"[{label}] assoc_ratio={metrics['assoc_ratio']:.3f}, "
@@ -400,6 +419,7 @@ def detection_metrics_from_df(
         f"recall={metrics['recall_mean']:.3f}"
     )
     return metrics
+
 
 def track_metrics_from_df(
     tracks_with_gt: pd.DataFrame,
@@ -412,7 +432,9 @@ def track_metrics_from_df(
     metrics: Dict[str, float] = {}
 
     # error-based metrics (RMSE, radii, etc.)
-    err_stats = compute_error_stats(tracks_with_gt, "tracks", radii=radii, quantiles=quantiles)
+    err_stats = compute_error_stats(
+        tracks_with_gt, "tracks", radii=radii, quantiles=quantiles
+    )
     metrics.update(err_stats)
 
     # Build interpolators for ego pose
@@ -433,7 +455,9 @@ def track_metrics_from_df(
             continue
 
         # rows associated with this GT
-        df_gid = tracks_with_gt[(tracks_with_gt["gt_id"] == gid) & tracks_with_gt["error"].notna()]
+        df_gid = tracks_with_gt[
+            (tracks_with_gt["gt_id"] == gid) & tracks_with_gt["error"].notna()
+        ]
         if df_gid.empty:
             availability_list.append(0.0)
             latency_list.append(float("nan"))
@@ -472,7 +496,9 @@ def track_metrics_from_df(
 
     if latency_list:
         lat_vals = np.array([v for v in latency_list if not np.isnan(v)])
-        metrics["latency_mean"] = float(np.mean(lat_vals)) if lat_vals.size > 0 else float("nan")
+        metrics["latency_mean"] = (
+            float(np.mean(lat_vals)) if lat_vals.size > 0 else float("nan")
+        )
     else:
         metrics["latency_mean"] = float("nan")
 
@@ -485,7 +511,9 @@ def track_metrics_from_df(
 
     # spurious tracks and residual speed as before...
     all_track_ids = set(tracks_with_gt["tracking_id"].unique())
-    associated_ids = set(tracks_with_gt.loc[tracks_with_gt["gt_id"].notna(), "tracking_id"].unique())
+    associated_ids = set(
+        tracks_with_gt.loc[tracks_with_gt["gt_id"].notna(), "tracking_id"].unique()
+    )
     spurious_ids = all_track_ids - associated_ids
     metrics["n_spurious_tracks"] = len(spurious_ids)
 
@@ -512,11 +540,15 @@ def track_metrics_from_df(
 
     return metrics
 
-def write_metrics_log(out_prefix: str, scenario: str,
-                      radar_metrics: Dict[str, float],
-                      camera_metrics: Dict[str, float],
-                      fused_metrics: Dict[str, float],
-                      track_metrics: Dict[str, float]) -> None:
+
+def write_metrics_log(
+    out_prefix: str,
+    scenario: str,
+    radar_metrics: Dict[str, float],
+    camera_metrics: Dict[str, float],
+    fused_metrics: Dict[str, float],
+    track_metrics: Dict[str, float],
+) -> None:
     """
     Write all metrics into a simple text log file.
     """
@@ -536,6 +568,7 @@ def write_metrics_log(out_prefix: str, scenario: str,
         dump_block("tracks", track_metrics)
 
     print(f"Metrics written to {log_path}")
+
 
 def compute_mse_for_dataset(
     df: pd.DataFrame,
@@ -567,7 +600,9 @@ def compute_mse_for_dataset(
     errors = []
 
     for t, xd, yd in zip(times, xs, ys):
-        gt_list = gt_static_body_positions_at_time(t, scenario, x_ego_fn, y_ego_fn, yaw_ego_fn)
+        gt_list = gt_static_body_positions_at_time(
+            t, scenario, x_ego_fn, y_ego_fn, yaw_ego_fn
+        )
         if not gt_list:
             gt_ids.append(None)
             gt_xb.append(np.nan)
@@ -602,14 +637,19 @@ def compute_mse_for_dataset(
 
     valid = df_out["error"].notna()
     if valid.sum() == 0:
-        print(f"[{label}] No associated detections within {cfg.max_assoc_dist} m, MSE is NaN.")
+        print(
+            f"[{label}] No associated detections within {cfg.max_assoc_dist} m, MSE is NaN."
+        )
         return float("nan"), df_out
 
     sq_errors = df_out.loc[valid, "error"].values ** 2
     mse = float(np.mean(sq_errors))
-    print(f"[{label}] MSE (static GT)"
-          f" = {mse:.3f} m^2 ({valid.sum()} associated detections)")
+    print(
+        f"[{label}] MSE (static GT)"
+        f" = {mse:.3f} m^2 ({valid.sum()} associated detections)"
+    )
     return mse, df_out
+
 
 def compute_error_stats(
     df_with_gt: pd.DataFrame,
@@ -661,16 +701,24 @@ def compute_error_stats(
         rq = float(np.quantile(errors, q))
         stats[f"radius_q{int(q*100)}"] = rq
 
-    print(f"[{label}] RMSE={rmse:.3f} m; "
-          + ", ".join([f"P(|e|<={r}m)={stats[f'p_within_{r:.2f}m']:.3f}" for r in radii])
-          + ", "
-          + ", ".join([f"r_{int(q*100)}={stats[f'radius_q{int(q*100)}']:.3f} m" for q in quantiles])
-          )
+    print(
+        f"[{label}] RMSE={rmse:.3f} m; "
+        + ", ".join([f"P(|e|<={r}m)={stats[f'p_within_{r:.2f}m']:.3f}" for r in radii])
+        + ", "
+        + ", ".join(
+            [
+                f"r_{int(q*100)}={stats[f'radius_q{int(q*100)}']:.3f} m"
+                for q in quantiles
+            ]
+        )
+    )
     return stats
+
 
 # ------------------------------------------------------------------------------
 # Plotting
 # ------------------------------------------------------------------------------
+
 
 def plot_xy(
     scenario: str,
@@ -693,19 +741,23 @@ def plot_xy(
     # 1) raw + fused + GT
     if scenario != "S3":
         plt.figure(figsize=(8, 12))
-        plt.scatter(fused_df_with_gt["gt_y_body"],
-                    fused_df_with_gt["gt_x_body"],
-                    marker='.',
-                    s=2,
-                    color = 'black',
-                    label='GT static')
-    plt.scatter(fused_df_with_gt["y"],
-                fused_df_with_gt["x"],
-                marker='.',
-                color = 'r',
-                s=2,
-                alpha=0.7,
-                label='Fused')
+        plt.scatter(
+            fused_df_with_gt["gt_y_body"],
+            fused_df_with_gt["gt_x_body"],
+            marker=".",
+            s=2,
+            color="black",
+            label="GT static",
+        )
+    plt.scatter(
+        fused_df_with_gt["y"],
+        fused_df_with_gt["x"],
+        marker=".",
+        color="r",
+        s=2,
+        alpha=0.7,
+        label="Fused",
+    )
     # Plot lines from fused detections to corresponding GT
     if scenario != "S3":
         for _, row in fused_df_with_gt.iterrows():
@@ -714,24 +766,28 @@ def plot_xy(
             plt.plot(
                 [row["gt_y_body"], row["y"]],
                 [row["gt_x_body"], row["x"]],
-                color='gray',
+                color="gray",
                 linewidth=0.5,
                 alpha=0.5,
             )
-    plt.scatter(radar_df["y"],
-                radar_df["x"],
-                marker='.',
-                color = 'g',
-                s=2,
-                alpha=0.7,
-                label='Radar detections')
-    plt.scatter(camera_df["y"],
-                camera_df["x"],
-                marker='.',
-                color = 'y',
-                s=2,
-                alpha=0.7,
-                label='Camera detections')
+    plt.scatter(
+        radar_df["y"],
+        radar_df["x"],
+        marker=".",
+        color="g",
+        s=2,
+        alpha=0.7,
+        label="Radar detections",
+    )
+    plt.scatter(
+        camera_df["y"],
+        camera_df["x"],
+        marker=".",
+        color="y",
+        s=2,
+        alpha=0.7,
+        label="Camera detections",
+    )
 
     plt.xlabel("y [m]")
     plt.ylabel("x [m]")
@@ -752,20 +808,24 @@ def plot_xy(
     # 2) GT + fused + tracks
     if scenario != "S3":
         plt.figure(figsize=(8, 12))
-        plt.scatter(fused_df_with_gt["gt_y_body"],
-                    fused_df_with_gt["gt_x_body"],
-                    marker='.',
-                    s=2,
-                    color = 'black',
-                    label='GT static')
+        plt.scatter(
+            fused_df_with_gt["gt_y_body"],
+            fused_df_with_gt["gt_x_body"],
+            marker=".",
+            s=2,
+            color="black",
+            label="GT static",
+        )
     if not fused_df_with_gt.empty:
-        plt.scatter(fused_df_with_gt["y"],
-                    fused_df_with_gt["x"],
-                    marker='.',
-                    color = 'r',
-                    s=2,
-                    alpha=0.7,
-                    label='Fused')
+        plt.scatter(
+            fused_df_with_gt["y"],
+            fused_df_with_gt["x"],
+            marker=".",
+            color="r",
+            s=2,
+            alpha=0.7,
+            label="Fused",
+        )
     # Plot lines from fused detections to corresponding GT
     if scenario != "S3":
         for _, row in fused_df_with_gt.iterrows():
@@ -774,18 +834,20 @@ def plot_xy(
             plt.plot(
                 [row["gt_y_body"], row["y"]],
                 [row["gt_x_body"], row["x"]],
-                color='gray',
+                color="gray",
                 linewidth=0.5,
                 alpha=0.5,
             )
     if not tracks_df.empty:
-        plt.scatter(tracks_df["y"],
-                    tracks_df["x"],
-                    marker='.',
-                    color = 'm',
-                    s=2,
-                    alpha=0.7,
-                    label='Tracks')
+        plt.scatter(
+            tracks_df["y"],
+            tracks_df["x"],
+            marker=".",
+            color="m",
+            s=2,
+            alpha=0.7,
+            label="Tracks",
+        )
     plt.xlabel("y [m]")
     plt.ylabel("x [m]")
     if scenario != "S3":
@@ -805,20 +867,24 @@ def plot_xy(
     # 3) GT + tracks
     if scenario != "S3":
         plt.figure(figsize=(8, 12))
-        plt.scatter(tracks_df["gt_y_body"],
-                    tracks_df["gt_x_body"],
-                    marker='.',
-                    s=2,
-                    color = 'black',
-                    label='GT static')
+        plt.scatter(
+            tracks_df["gt_y_body"],
+            tracks_df["gt_x_body"],
+            marker=".",
+            s=2,
+            color="black",
+            label="GT static",
+        )
     if not tracks_df.empty:
-        plt.scatter(tracks_df["y"],
-                    tracks_df["x"],
-                    marker='.',
-                    color = 'm',
-                    s=2,
-                    alpha=0.7,
-                    label='Tracks')
+        plt.scatter(
+            tracks_df["y"],
+            tracks_df["x"],
+            marker=".",
+            color="m",
+            s=2,
+            alpha=0.7,
+            label="Tracks",
+        )
     # Plot lines from tracks to corresponding GT
     if scenario != "S3":
         for _, row in tracks_df.iterrows():
@@ -827,7 +893,7 @@ def plot_xy(
             plt.plot(
                 [row["gt_y_body"], row["y"]],
                 [row["gt_x_body"], row["x"]],
-                color='gray',
+                color="gray",
                 linewidth=0.5,
                 alpha=0.5,
             )
@@ -847,27 +913,37 @@ def plot_xy(
     plt.savefig(f"{out_prefix}_tracks_vs_gt.png", dpi=300)
     plt.close()
 
+
 # ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", required=True, help="Scenario name (e.g. S1, S2, S4)")
+    parser.add_argument(
+        "--scenario", required=True, help="Scenario name (e.g. S1, S2, S4)"
+    )
     parser.add_argument("--raw", required=True, help="Path to raw_detections CSV")
     parser.add_argument("--fused", required=True, help="Path to fused_detections CSV")
     parser.add_argument("--tracks", required=True, help="Path to tracks CSV")
     parser.add_argument("--ego", required=True, help="Path to ego_odometry CSV")
-    parser.add_argument("--out_prefix", required=True, help="Prefix for output figures (e.g. plots/S1)")
+    parser.add_argument(
+        "--out_prefix", required=True, help="Prefix for output figures (e.g. plots/S1)"
+    )
     args = parser.parse_args()
 
     scenario = args.scenario
     cfg = AnalysisConfig()
 
-    if scenario not in STATIC_GT_WORLD or (scenario != "S3" and not STATIC_GT_WORLD[scenario]):
-        print(f"WARNING: No static GT configured for scenario {scenario}. "
-              f"Fill STATIC_GT_WORLD in this script before running.")
-    
+    if scenario not in STATIC_GT_WORLD or (
+        scenario != "S3" and not STATIC_GT_WORLD[scenario]
+    ):
+        print(
+            f"WARNING: No static GT configured for scenario {scenario}. "
+            f"Fill STATIC_GT_WORLD in this script before running."
+        )
+
     print(f"Analyzing scenario {scenario}")
 
     radar_df, camera_df = load_raw_detections(args.raw)
@@ -896,14 +972,17 @@ def main():
     # tracks_with_gt.to_csv(f"{args.out_prefix}_tracks_with_gt.csv", index=False)
 
     print(f"\nScenario {scenario} MSE summary (static GT):")
-    print(f"  Radar detections: {mse_radar:.3f} m^2"
-          f" (RMSE {np.sqrt(mse_radar):.3f} m)")
-    print(f"  Camera detections: {mse_camera:.3f} m^2"
-          f" (RMSE {np.sqrt(mse_camera):.3f} m)")
-    print(f"  Fused detections: {mse_fused:.3f} m^2"
-          f" (RMSE {np.sqrt(mse_fused):.3f} m)")
-    print(f"  Tracks: {mse_tracks:.3f} m^2"
-          f" (RMSE {np.sqrt(mse_tracks):.3f} m)")
+    print(
+        f"  Radar detections: {mse_radar:.3f} m^2" f" (RMSE {np.sqrt(mse_radar):.3f} m)"
+    )
+    print(
+        f"  Camera detections: {mse_camera:.3f} m^2"
+        f" (RMSE {np.sqrt(mse_camera):.3f} m)"
+    )
+    print(
+        f"  Fused detections: {mse_fused:.3f} m^2" f" (RMSE {np.sqrt(mse_fused):.3f} m)"
+    )
+    print(f"  Tracks: {mse_tracks:.3f} m^2" f" (RMSE {np.sqrt(mse_tracks):.3f} m)")
     if scenario != "S3":
         # Compute detection-level metrics
         radar_metrics = detection_metrics_from_df(
@@ -917,9 +996,7 @@ def main():
         )
 
         # Track-level metrics
-        track_metrics = track_metrics_from_df(
-            tracks_with_gt, ego_df, scenario, cfg
-        )
+        track_metrics = track_metrics_from_df(tracks_with_gt, ego_df, scenario, cfg)
 
         # Write everything to a log file
         write_metrics_log(
@@ -929,7 +1006,7 @@ def main():
             camera_metrics,
             fused_metrics,
             track_metrics,
-    )
+        )
     # Draw plots
     plot_xy(
         scenario,

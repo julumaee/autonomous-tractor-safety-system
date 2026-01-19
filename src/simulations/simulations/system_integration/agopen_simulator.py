@@ -16,14 +16,15 @@ import random
 
 import rclpy
 from rclpy.node import Node
+
 from tractor_safety_system_interfaces.msg import ControlCommand
 
 
 class AgOpenSimulator(Node):
 
     def __init__(self):
-        super().__init__('agopen_simulator')
-        self.publisher_ = self.create_publisher(ControlCommand, '/control/agopen', 10)
+        super().__init__("agopen_simulator")
+        self.publisher_ = self.create_publisher(ControlCommand, "/control/agopen", 10)
         self.timer = self.create_timer(1, self.simulate_control)
 
     def simulate_control(self):
@@ -42,5 +43,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

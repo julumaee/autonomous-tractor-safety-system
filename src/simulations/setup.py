@@ -12,54 +12,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from glob import glob
 import os
+from glob import glob
 
 from setuptools import find_packages, setup
 
-
-package_name = 'simulations'
+package_name = "simulations"
 
 setup(
     name=package_name,
-    version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    version="0.0.0",
+    packages=find_packages(exclude=["test"]),
     data_files=[
-        ('share/ament_index/resource_index/packages',
-            ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
-        (f'share/{package_name}/config',
-            [p for p in glob('config/*') if os.path.isfile(p)]),
-        (f'share/{package_name}/launch',
-            [p for p in glob('launch/*.launch.py') if os.path.isfile(p)]),
-        (f'share/{package_name}/worlds',
-            [p for p in glob('worlds/*.sdf') if os.path.isfile(p)]),
+        ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
+        ("share/" + package_name, ["package.xml"]),
+        (
+            f"share/{package_name}/config",
+            [p for p in glob("config/*") if os.path.isfile(p)],
+        ),
+        (
+            f"share/{package_name}/launch",
+            [p for p in glob("launch/*.launch.py") if os.path.isfile(p)],
+        ),
+        (
+            f"share/{package_name}/worlds",
+            [p for p in glob("worlds/*.sdf") if os.path.isfile(p)],
+        ),
     ],
-    install_requires=['setuptools'],
+    install_requires=["setuptools"],
     zip_safe=True,
-    maintainer='eemil',
-    maintainer_email='eemil.kulmala@hotmail.com',
-    description='Package inludes files needed for simulating the system',
-    license='Apache-2.0',
-    tests_require=['pytest'],
+    maintainer="eemil",
+    maintainer_email="eemil.kulmala@hotmail.com",
+    description="Package inludes files needed for simulating the system",
+    license="Apache-2.0",
+    tests_require=["pytest"],
     entry_points={
-        'console_scripts': [
-            'camera_simulator = simulations.system_integration.camera_simulator:main',
-            'radar_simulator_can = simulations.system_integration.radar_simulator_can:main',
-            'agopen_simulator = simulations.system_integration.agopen_simulator:main',
-            'target_to_fuse = simulations.system_integration.target_to_fuse_simulator:main',
-            'object_simulator = simulations.system_integration.simulate_objects:main',
-            'twist_to_control = simulations.gazebo.twist_to_control:main',
-            'control_to_twist = simulations.gazebo.control_to_twist:main',
-            'lidar_to_radar = simulations.gazebo.lidar_to_radar:main',
-            'camera_to_camera = simulations.gazebo.camera_to_camera:main',
-            'spatial_from_yolo = simulations.gazebo.spatial_from_yolo:main',
-            'laser_to_radar = simulations.gazebo.laser_to_radar:main',
-            'visualize_tracks = simulations.gazebo.visualize_tracks:main',
-            'ego_odom_sim = simulations.gazebo.ego_odom_sim:main',
-            'detection_logger = simulations.logging_tools.detection_logger:main',
-            'pedestrian_gt_bridge = simulations.gazebo.pedestrian_gt_bridge:main',
-            'scripted_driver = simulations.gazebo.scripted_driver:main'
+        "console_scripts": [
+            "camera_simulator = simulations.system_integration.camera_simulator:main",
+            "radar_simulator_can = simulations.system_integration.radar_simulator_can:main",
+            "agopen_simulator = simulations.system_integration.agopen_simulator:main",
+            "target_to_fuse = simulations.system_integration.target_to_fuse_simulator:main",
+            "object_simulator = simulations.system_integration.simulate_objects:main",
+            "twist_to_control = simulations.gazebo.twist_to_control:main",
+            "control_to_twist = simulations.gazebo.control_to_twist:main",
+            "lidar_to_radar = simulations.gazebo.lidar_to_radar:main",
+            "camera_to_camera = simulations.gazebo.camera_to_camera:main",
+            "spatial_from_yolo = simulations.gazebo.spatial_from_yolo:main",
+            "laser_to_radar = simulations.gazebo.laser_to_radar:main",
+            "visualize_tracks = simulations.gazebo.visualize_tracks:main",
+            "ego_odom_sim = simulations.gazebo.ego_odom_sim:main",
+            "detection_logger = simulations.logging_tools.detection_logger:main",
+            "pedestrian_gt_bridge = simulations.gazebo.pedestrian_gt_bridge:main",
+            "scripted_driver = simulations.gazebo.scripted_driver:main",
         ],
     },
 )

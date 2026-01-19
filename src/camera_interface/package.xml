@@ -8,9 +8,10 @@
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
-
-  <build_depend>depthai_ros_msgs</build_depend>
-  <exec_depend>depthai_ros_msgs</exec_depend>
+  <depend>std_msgs</depend>
+  <depend>vision_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tractor_safety_system_interfaces</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

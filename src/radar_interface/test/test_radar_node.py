@@ -16,8 +16,9 @@ import unittest
 from unittest.mock import patch
 
 import can
-from radar_interface.radar_node import RadarNode
 import rclpy
+
+from radar_interface.radar_node import RadarNode
 
 
 class TestRadarNode(unittest.TestCase):
@@ -35,8 +36,9 @@ class TestRadarNode(unittest.TestCase):
     def setUp(self):
         """Initialize RadarNode with a mocked CAN bus."""
         # Mock `listen_to_can()` so it does nothing
-        with patch.object(RadarNode, 'listen_to_can'), \
-                patch('can.interface.Bus') as MockBus:
+        with patch.object(RadarNode, "listen_to_can"), patch(
+            "can.interface.Bus"
+        ) as MockBus:
 
             self.mock_can_bus = MockBus.return_value
             self.radar_node = RadarNode()
@@ -57,11 +59,11 @@ class TestRadarNode(unittest.TestCase):
 
     def create_radar_data(self, x, y, z, frame_id, speed):
         """Create a CAN-message format radar frame."""
-        cluster_id = frame_id     # Cluster ID: 0-255 (8 bits)
-        dist_long = x       # Longitudinal distance in meters
-        dist_lat = y        # Lateral distance in meters
-        vrel_long = speed   # Relative velocity in m/s
-        height = z          # Height in meters
+        cluster_id = frame_id  # Cluster ID: 0-255 (8 bits)
+        dist_long = x  # Longitudinal distance in meters
+        dist_lat = y  # Lateral distance in meters
+        vrel_long = speed  # Relative velocity in m/s
+        height = z  # Height in meters
         # Frame 0: dist_long, dist_lat, vrel_long
         frame0 = self.format_frame0(cluster_id, dist_long, dist_lat, vrel_long)
         msg0 = can.Message(arbitration_id=0x701, data=frame0, is_extended_id=False)
@@ -135,21 +137,36 @@ class TestRadarNode(unittest.TestCase):
         self.radar_node.process_radar_data(frame1)
 
         # Check if detection was published
-        self.assertEqual(len(self.published_detections), 1,
-                         msg='Detection should have been published once.')
+        self.assertEqual(
+            len(self.published_detections),
+            1,
+            msg="Detection should have been published once.",
+        )
 
         # Verify that the detection has expected values
         radar_detection = self.published_detections[0]
 
-        self.assertEqual(radar_detection.header.frame_id, 'radar_link',
-                         msg='Detection should have correct ID')
-        self.assertAlmostEqual(radar_detection.position.x, x, places=2,
-                               msg='Fused position X should match radar')
-        self.assertAlmostEqual(radar_detection.position.y, y, places=2,
-                               msg='Fused position Y should match radar')
-        self.assertEqual(radar_detection.speed, speed,
-                         msg='Fused speed should match radar')
+        self.assertEqual(
+            radar_detection.header.frame_id,
+            "radar_link",
+            msg="Detection should have correct ID",
+        )
+        self.assertAlmostEqual(
+            radar_detection.position.x,
+            x,
+            places=2,
+            msg="Fused position X should match radar",
+        )
+        self.assertAlmostEqual(
+            radar_detection.position.y,
+            y,
+            places=2,
+            msg="Fused position Y should match radar",
+        )
+        self.assertEqual(
+            radar_detection.speed, speed, msg="Fused speed should match radar"
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

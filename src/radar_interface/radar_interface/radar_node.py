@@ -13,31 +13,34 @@
 # limitations under the License.
 
 import can
-from rcl_interfaces.msg import SetParametersResult
 import rclpy
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from std_msgs.msg import Header
+
 from tractor_safety_system_interfaces.msg import RadarDetection
 
 
 class RadarNode(Node):
 
     def __init__(self):
-        super().__init__('radar_publisher')
-        self.publisher_ = self.create_publisher(RadarDetection, '/radar_detections', 10)
-        self.declare_parameter('can_channel', 'can0')
-        self.can_channel = self.get_parameter('can_channel').value
+        super().__init__("radar_publisher")
+        self.publisher_ = self.create_publisher(RadarDetection, "/radar_detections", 10)
+        self.declare_parameter("can_channel", "can0")
+        self.can_channel = self.get_parameter("can_channel").value
 
         # Set up the CAN interface with correct can channel and socketcan
         try:
-            self.bus = can.interface.Bus(channel=self.can_channel, interface='socketcan')
+            self.bus = can.interface.Bus(
+                channel=self.can_channel, interface="socketcan"
+            )
         except Exception as e:
-            self.get_logger().error(f'Failed to connect to CAN bus: {e}')
+            self.get_logger().error(f"Failed to connect to CAN bus: {e}")
             return
-        self.get_logger().info(f'Connected to CAN bus on channel {self.can_channel}')
+        self.get_logger().info(f"Connected to CAN bus on channel {self.can_channel}")
 
         self.frame_buffer = {}
-        self.listen_to_can()
+        self.timer = self.create_timer(0.01, self.poll_can)
 
         # Subscribe to parameter updates
         self.add_on_set_parameters_callback(self.on_set_parameters)
@@ -45,16 +48,14 @@ class RadarNode(Node):
     def on_set_parameters(self, params):
         """Set parameters their new values."""
         for param in params:
-            if param.name == 'can_channel':
+            if param.name == "can_channel":
                 self.can_channel = param.value
         return SetParametersResult(successful=True)
 
-    def listen_to_can(self):
-        """Read and publish CAN messages in a loop."""
-        while rclpy.ok():
-            frame = self.bus.recv(timeout=0.1)  # Waits for a message for 0.1 seconds
-            if frame:
-                self.process_radar_data(frame)
+    def poll_can(self):
+        frame = self.bus.recv(timeout=0.0)
+        if frame:
+            self.process_radar_data(frame)
 
     def process_radar_data(self, frame):
         """Process CAN frame and add to buffer."""
@@ -69,18 +70,21 @@ class RadarNode(Node):
 
         if frame_number == 0:
             # Store first part of the trace
-            self.frame_buffer[target_id] = {'frame0': data}
+            self.frame_buffer[target_id] = {"frame0": data}
         elif frame_number == 1:
             # Store second part of the trace and try to combine
-            if target_id in self.frame_buffer and 'frame0' in self.frame_buffer[target_id]:
-                self.frame_buffer[target_id]['frame1'] = data
+            if (
+                target_id in self.frame_buffer
+                and "frame0" in self.frame_buffer[target_id]
+            ):
+                self.frame_buffer[target_id]["frame1"] = data
                 self.publish_radar_detection(target_id)
 
     def publish_radar_detection(self, target_id):
         """Combine the two CAN frames into a radar detection anf publish."""
         try:
-            frame0 = self.frame_buffer[target_id]['frame0']
-            frame1 = self.frame_buffer[target_id]['frame1']
+            frame0 = self.frame_buffer[target_id]["frame0"]
+            frame1 = self.frame_buffer[target_id]["frame1"]
             del self.frame_buffer[target_id]  # Clean up buffer
 
             # Longitudinal distance
@@ -104,22 +108,22 @@ class RadarNode(Node):
             # Publish message
             radar_detection_msg = RadarDetection()
             radar_detection_msg.header = Header()
-            radar_detection_msg.header.frame_id = 'radar_link'
+            radar_detection_msg.header.frame_id = "radar_link"
             radar_detection_msg.header.stamp = self.get_clock().now().to_msg()
 
             radar_detection_msg.position.x = dist_long
             radar_detection_msg.position.y = dist_lat
             radar_detection_msg.position.z = height
             radar_detection_msg.speed = vrel_long
-            radar_detection_msg.distance = (dist_long ** 2 + dist_lat ** 2) ** 0.5
+            radar_detection_msg.distance = (dist_long**2 + dist_lat**2) ** 0.5
 
             self.publisher_.publish(radar_detection_msg)
             self.get_logger().info(
-                f'Radar target ID={target_id}, Distance={radar_detection_msg.distance}'
+                f"Radar target ID={target_id}, Distance={radar_detection_msg.distance}"
             )
 
         except Exception as e:
-            self.get_logger().error(f'Error publishing radar detection: {e}')
+            self.get_logger().error(f"Error publishing radar detection: {e}")
 
 
 def main(args=None):
@@ -130,5 +134,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

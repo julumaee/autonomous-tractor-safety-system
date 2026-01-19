@@ -16,7 +16,12 @@ import os
 
 from ament_index_python.packages import get_package_share_path
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, Shutdown
+from launch.actions import (
+    DeclareLaunchArgument,
+    LogInfo,
+    RegisterEventHandler,
+    Shutdown,
+)
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration
@@ -25,65 +30,61 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     # Resolve default parameter file inside the installed package
-    pkg_share = get_package_share_path('simulations')
-    default_params = os.path.join(pkg_share, 'config', 'parameters_simulated.yaml')
+    pkg_share = get_package_share_path("simulations")
+    default_params = os.path.join(pkg_share, "config", "parameters_simulated.yaml")
 
     # Allow overriding from CLI
     params_arg = DeclareLaunchArgument(
-        'params',
+        "params",
         default_value=default_params,
-        description='Path to parameters YAML for safety_monitor'
+        description="Path to parameters YAML for safety_monitor",
     )
 
     # Option to start safety monitor
     start_safety_monitor_arg = DeclareLaunchArgument(
-        'start_safety_monitor',
-        default_value='true',
-        description='Whether to start the safety monitor node'
+        "start_safety_monitor",
+        default_value="true",
+        description="Whether to start the safety monitor node",
     )
 
-    params = LaunchConfiguration('params')
-    start_safety_monitor = LaunchConfiguration('start_safety_monitor')
+    params = LaunchConfiguration("params")
+    start_safety_monitor = LaunchConfiguration("start_safety_monitor")
 
     # List of all nodes to launch
     nodes = [
-
         # Camera Node (Processes real or simulated camera detections)
         Node(
-            package='camera_interface',
-            executable='camera_node',
-            name='camera_node',
+            package="camera_interface",
+            executable="camera_node",
+            name="camera_node",
             parameters=[params],
-            output='screen'
+            output="screen",
         ),
-
         # Sensor Fusion Node (Combines camera & radar data)
         Node(
-            package='sensor_fusion',
-            executable='fusion_node',
-            name='fusion_node',
+            package="sensor_fusion",
+            executable="fusion_node",
+            name="fusion_node",
             parameters=[params],
-            output='screen'
+            output="screen",
         ),
-
         # Tracker node (Tracks fused detections over time)
         Node(
-            package='sensor_fusion',
-            executable='kf_tracker',
-            name='kf_tracker',
+            package="sensor_fusion",
+            executable="kf_tracker",
+            name="kf_tracker",
             parameters=[params],
-            output='screen'
+            output="screen",
         ),
-
         # Safety Monitor (Monitors fused detections and controls vehicle state)
         Node(
-            package='safety_monitor',
-            executable='safety_monitor',
-            name='safety_monitor',
+            package="safety_monitor",
+            executable="safety_monitor",
+            name="safety_monitor",
             parameters=[params],
             condition=IfCondition(start_safety_monitor),
-            output='screen'
-        )
+            output="screen",
+        ),
     ]
 
     # Create shutdown handlers for all nodes
@@ -91,17 +92,19 @@ def generate_launch_description():
         RegisterEventHandler(
             OnProcessExit(
                 target_action=node,
-                on_exit=[Shutdown()]  # Shut down all nodes when any one exits
+                on_exit=[Shutdown()],  # Shut down all nodes when any one exits
             )
         )
         for node in nodes
     ]
 
-    return LaunchDescription([
-        params_arg,
-        start_safety_monitor_arg,
-        LogInfo(msg='Launching all nodes...'),
-        *nodes,
-        *shutdown_handlers,
-        LogInfo(msg='All nodes launched successfully.'),
-    ])
+    return LaunchDescription(
+        [
+            params_arg,
+            start_safety_monitor_arg,
+            LogInfo(msg="Launching all nodes..."),
+            *nodes,
+            *shutdown_handlers,
+            LogInfo(msg="All nodes launched successfully."),
+        ]
+    )

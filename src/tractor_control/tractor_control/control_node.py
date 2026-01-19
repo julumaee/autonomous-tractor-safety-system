@@ -12,29 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from geometry_msgs.msg import TwistWithCovarianceStamped as TWCS
 import rclpy
+from geometry_msgs.msg import TwistWithCovarianceStamped as TWCS
 from rclpy.node import Node
+
 from tractor_safety_system_interfaces.msg import ControlCommand
 
 
 class TractorControl(Node):
 
     def __init__(self):
-        super().__init__('control_node')
+        super().__init__("control_node")
         self.control_subscription = self.create_subscription(
-            ControlCommand,
-            '/control',
-            self.control_tractor,
-            10)
-        self.pub = self.create_publisher(TWCS, '/ego_motion', 50)
+            ControlCommand, "/control", self.control_tractor, 10
+        )
+        self.pub = self.create_publisher(TWCS, "/ego_motion", 50)
 
     def control_tractor(self, control_command):
         """Control the tractor based on the received command."""
         # TODO The tractor control logic goes here
-        self.get_logger().info('Received control command: '
-                               f'speed={control_command.speed}, '
-                               f'steering_angle={control_command.steering_angle}')
+        self.get_logger().info(
+            "Received control command: "
+            f"speed={control_command.speed}, "
+            f"steering_angle={control_command.steering_angle}"
+        )
 
 
 def main(args=None):
@@ -45,5 +46,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

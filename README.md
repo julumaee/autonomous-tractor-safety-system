@@ -336,7 +336,17 @@ ros2 launch simulations bring_up_sim.launch.py
 ### Safety system core components
 
 ```bash
-ros2 launch simulations safety_system_core.launch.py
+# Recommended: Use the new launch package
+ros2 launch tractor_safety_system_launch safety_system_core.launch.py
+
+# Alternative: Launch perception stack only (sensors + fusion)
+ros2 launch tractor_safety_system_launch perception_stack.launch.py
+
+# Alternative: Launch safety stack only (fusion + safety monitor + control)
+ros2 launch tractor_safety_system_launch safety_stack.launch.py
+
+# Deprecated (still works but forwards to new package):
+# ros2 launch simulations safety_system_core.launch.py
 ```
 
 ### YOLOv8 object detection (ultralytics-ros)

@@ -35,6 +35,7 @@ import unittest
 
 import rclpy
 from rclpy.parameter import Parameter
+
 from sensor_fusion.fusion_node import FusionNode
 
 
@@ -57,8 +58,8 @@ class TestFusionParameters(unittest.TestCase):
     def test_parameter_update(self):
         """Test that parameters can be updated correctly."""
         new_params = [
-            Parameter(name='time_threshold', value=1.0),
-            Parameter(name='camera_trust_max', value=15.0),
+            Parameter(name="time_threshold", value=1.0),
+            Parameter(name="camera_trust_max", value=15.0),
         ]
         self.fusion_node.on_set_parameters(new_params)
 
@@ -67,5 +68,5 @@ class TestFusionParameters(unittest.TestCase):
         self.assertEqual(self.fusion_node.camera_trust_max, 15.0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
