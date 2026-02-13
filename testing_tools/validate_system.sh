@@ -9,11 +9,13 @@ echo "System Validation - Pre-Test Checks"
 echo "========================================"
 echo ""
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 FAIL_COUNT=0
 WARN_COUNT=0
 
 # Check 1: ROS 2 workspace
-echo "[1/10] Checking ROS 2 workspace..."
+echo "[1/11] Checking ROS 2 workspace..."
 if ! command -v ros2 &> /dev/null; then
     echo "  ✗ FAIL: ROS 2 not found in PATH"
     ((FAIL_COUNT++))
@@ -27,7 +29,7 @@ fi
 echo ""
 
 # Check 2: CAN interface
-echo "[2/10] Checking CAN interface..."
+echo "[2/11] Checking CAN interface..."
 if ! ip link show can0 &>/dev/null; then
     echo "  ✗ FAIL: CAN interface can0 not found"
     echo "         Attach Kvaser device and run setup_can.sh"
@@ -50,7 +52,7 @@ fi
 echo ""
 
 # Check 3: GPS availability
-echo "[3/10] Checking GPS data..."
+echo "[3/11] Checking GPS data..."
 GPS_TOPICS=$(ros2 topic list 2>/dev/null | grep -E "(gps|fix|navsat)" || echo "")
 if [ -z "$GPS_TOPICS" ]; then
     echo "  ✗ FAIL: No GPS topics found"
@@ -77,7 +79,7 @@ fi
 echo ""
 
 # Check 4: Camera (OAK-D)
-echo "[4/10] Checking OAK-D camera..."
+echo "[4/11] Checking OAK-D camera..."
 if ! lsusb | grep -i "movidius\|myriadx\|luxonis\|oak" &>/dev/null; then
     echo "  ✗ FAIL: OAK-D camera not detected via USB"
     echo "         Check USB connection"
@@ -88,7 +90,7 @@ fi
 echo ""
 
 # Check 5: Required executables
-echo "[5/10] Checking ROS 2 executables..."
+echo "[5/11] Checking ROS 2 executables..."
 EXECUTABLES=(
     "simulations:gps_ego_motion"
     "simulations:real_world_logger"
@@ -113,7 +115,7 @@ done
 echo ""
 
 # Check 6: Log directory
-echo "[6/10] Checking log directory..."
+echo "[6/11] Checking log directory..."
 if [ ! -d "real_world_logs" ]; then
     echo "  ⚠ WARN: real_world_logs directory doesn't exist (will be created)"
     ((WARN_COUNT++))
@@ -131,7 +133,7 @@ fi
 echo ""
 
 # Check 7: Disk space
-echo "[7/10] Checking disk space..."
+echo "[7/11] Checking disk space..."
 DISK_AVAIL=$(df -h . | tail -1 | awk '{print $4}')
 DISK_AVAIL_GB=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
 if [ "$DISK_AVAIL_GB" -lt 1 ]; then
@@ -146,7 +148,7 @@ fi
 echo ""
 
 # Check 8: CAN utilities
-echo "[8/10] Checking CAN utilities..."
+echo "[8/11] Checking CAN utilities..."
 if ! command -v candump &> /dev/null; then
     echo "  ✗ FAIL: candump not found"
     echo "         Install: sudo apt install can-utils"
@@ -157,7 +159,7 @@ fi
 echo ""
 
 # Check 9: Launch files
-echo "[9/10] Checking required launch files..."
+echo "[9/11] Checking required launch files..."
 LAUNCH_FILES_OK=true
 
 # Check perception stack launch file using ros2 launch --show-args
@@ -181,8 +183,34 @@ else
 fi
 echo ""
 
-# Check 10: System resources
-echo "[10/10] Checking system resources..."
+# Check 10: Calibration / TF usage
+echo "[10/11] Checking TF configuration usage..."
+
+LAST_LAUNCH_FILE="${SCRIPT_DIR}/last_launch_test.env"
+if [ -f "$LAST_LAUNCH_FILE" ]; then
+    # shellcheck disable=SC1090
+    source "$LAST_LAUNCH_FILE"
+
+    if [ "${LAUNCH_TEST_MODE:-}" = "positions_only" ]; then
+        echo "  ⚠ WARN: Last launch_test.sh run used positions-only mode"
+        echo "         This uses default roll/pitch/yaw values."
+        echo "         If you have calibration results, use full TF mode (14 args) from REAL_WORLD_TESTING_GUIDE.md."
+        ((WARN_COUNT++))
+    elif [ "${LAUNCH_TEST_MODE:-}" = "full_tf" ]; then
+        echo "  ✓ PASS: Last launch_test.sh run used full TF mode"
+    else
+        echo "  ⚠ WARN: last_launch_test.env found but LAUNCH_TEST_MODE is missing/unknown"
+        ((WARN_COUNT++))
+    fi
+else
+    echo "  ⚠ WARN: No last_launch_test.env found"
+    echo "         After calibration, run launch_test.sh in full TF mode (14 args) to apply calibrated roll/pitch/yaw values."
+    ((WARN_COUNT++))
+fi
+echo ""
+
+# Check 11: System resources
+echo "[11/11] Checking system resources..."
 CPU_COUNT=$(nproc)
 MEM_TOTAL=$(free -g | awk '/^Mem:/{print $2}')
 
