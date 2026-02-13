@@ -19,7 +19,7 @@ from geometry_msgs.msg import Point
 from rclpy.node import Node
 from std_msgs.msg import Header
 from vision_msgs.msg import (
-    BoundingBox2D,
+    BoundingBox3D,
     Detection3D,
     Detection3DArray,
     ObjectHypothesis,
@@ -56,6 +56,7 @@ class CameraSimulator(Node):
 
             detection = Detection3D()
             detection.results = []
+            detection.id = f"object_{simulated_object.object_id}"
             # Create ObjectHypothesisWithPose from ObjectHypothesis
             result_with_pose = ObjectHypothesisWithPose()
             result_with_pose.hypothesis = self.generate_object_hypothesis()
@@ -68,13 +69,7 @@ class CameraSimulator(Node):
             result_with_pose.pose.pose.position = camera_position
             detection.results = [result_with_pose]
 
-            detection.bbox = (
-                self.generate_bounding_box()
-            )
-
-            detection.is_tracking = random.choice([True, False])
-            if detection.is_tracking:
-                detection.tracking_id = f"object_{simulated_object.object_id}"
+            detection.bbox = self.generate_bounding_box(camera_position)
 
             # Add detection to the array
             detection_array.detections.append(detection)
@@ -94,14 +89,16 @@ class CameraSimulator(Node):
         return hypothesis
 
     @staticmethod
-    def generate_bounding_box():
-        """Generate a random bounding box."""
-        bbox = BoundingBox2D()
-        bbox.center.position.x = random.uniform(100, 500)
-        bbox.center.position.y = random.uniform(100, 500)
-        bbox.center.theta = 0.0
-        bbox.size_x = random.uniform(50, 150)
-        bbox.size_y = random.uniform(50, 150)
+    def generate_bounding_box(center_position: Point):
+        """Generate a simple 3D bounding box around the detection."""
+        bbox = BoundingBox3D()
+        bbox.center.position = center_position
+        bbox.center.orientation.w = 1.0
+
+        # Size is not used by the camera_interface node, but keep it non-zero.
+        bbox.size.x = random.uniform(0.2, 0.8)
+        bbox.size.y = random.uniform(0.2, 0.8)
+        bbox.size.z = random.uniform(0.5, 1.8)
         return bbox
 
 

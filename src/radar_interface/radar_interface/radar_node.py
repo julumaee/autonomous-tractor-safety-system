@@ -27,6 +27,16 @@ class RadarNode(Node):
         super().__init__("radar_publisher")
         self.publisher_ = self.create_publisher(RadarDetection, "/radar_detections", 10)
         self.declare_parameter("can_channel", "can0")
+        self.declare_parameter("frame_timeout", 0.5)  # seconds
+        self.declare_parameter("poll_period", 0.01)  # seconds
+        self.declare_parameter("min_confidence_percent", 90)   # 0..100
+        self.declare_parameter("min_height_m", 0.6)            # meters
+        self.declare_parameter("use_abs_height", True)         # safer default
+
+        self.min_confidence_percent = float(self.get_parameter("min_confidence_percent").value)
+        self.min_height_m = float(self.get_parameter("min_height_m").value)
+        self.use_abs_height = bool(self.get_parameter("use_abs_height").value)
+
         self.can_channel = self.get_parameter("can_channel").value
 
         # Set up the CAN interface with correct can channel and socketcan
@@ -35,8 +45,9 @@ class RadarNode(Node):
 
         self.frame_buffer = {}
         self.frame_timestamps = {}  # Track when frames arrive for timeout handling
-        self.frame_timeout = 0.5  # Timeout in seconds for incomplete frame pairs
-        self.timer = self.create_timer(0.01, self.poll_can)
+        self.frame_timeout = float(self.get_parameter("frame_timeout").value)
+        poll_period = float(self.get_parameter("poll_period").value)
+        self.timer = self.create_timer(poll_period, self.poll_can)
 
         # Subscribe to parameter updates
         self.add_on_set_parameters_callback(self.on_set_parameters)
@@ -66,11 +77,23 @@ class RadarNode(Node):
         """Poll CAN bus for incoming frames."""
         if self.bus is None:
             return
-        frame = self.bus.recv(timeout=0.0)
-        if frame:
+
+        # Drain all currently queued frames. Reading just one frame per timer tick
+        # can easily drop frames on high-rate radars, causing incomplete pairs.
+        while True:
+            frame = self.bus.recv(timeout=0.0)
+            if frame is None:
+                break
             self.process_radar_data(frame)
         # Clean up stale frame buffer entries
         self._cleanup_stale_frames()
+
+    def _decode_confidence_percent(self, frame1: bytes) -> float:
+        # Objects_Confid: start bit 56, len 6 => byte7 bits0..5
+        raw = frame1[7] & 0x3F
+        conf = raw * 5.0
+        # clamp to sane percent range
+        return max(0.0, min(100.0, conf))
 
     def process_radar_data(self, frame):
         """Process CAN frame and add to buffer."""
@@ -86,16 +109,22 @@ class RadarNode(Node):
 
         if target_id not in self.frame_buffer:
             self.frame_buffer[target_id] = {}
-            self.frame_timestamps[target_id] = current_time
+
+        # Update timestamp on every relevant frame so actively-updating targets
+        # don't get cleaned up just because the first half arrived long ago.
+        self.frame_timestamps[target_id] = current_time
 
         if frame_number == 0:
             # Store first part of the trace
             self.frame_buffer[target_id]["frame0"] = data
         elif frame_number == 1:
-            # Store second part of the trace and try to combine
-            if "frame0" in self.frame_buffer[target_id]:
-                self.frame_buffer[target_id]["frame1"] = data
-                self.publish_radar_detection(target_id)
+            # Store second part of the trace (may arrive before frame0)
+            self.frame_buffer[target_id]["frame1"] = data
+
+        # Publish once we have both halves, regardless of arrival order.
+        buf = self.frame_buffer.get(target_id, {})
+        if "frame0" in buf and "frame1" in buf:
+            self.publish_radar_detection(target_id)
 
     def _cleanup_stale_frames(self):
         """Remove incomplete frame pairs that have timed out."""
@@ -116,7 +145,10 @@ class RadarNode(Node):
         try:
             frame0 = self.frame_buffer[target_id]["frame0"]
             frame1 = self.frame_buffer[target_id]["frame1"]
-            del self.frame_buffer[target_id]  # Clean up buffer
+
+            # Clean up buffer/timestamp immediately to avoid repeated publishes.
+            if target_id in self.frame_buffer:
+                del self.frame_buffer[target_id]
             if target_id in self.frame_timestamps:
                 del self.frame_timestamps[target_id]
 
@@ -138,6 +170,18 @@ class RadarNode(Node):
             height = ((frame1[1] << 2) | (frame1[2] >> 6)) & 0x3FF
             height = height * 0.1 - 30
 
+            confidence = self._decode_confidence_percent(frame1)
+            # clamp to 0..100 for safety
+            confidence = max(0.0, min(100.0, confidence))
+
+            z_for_filter = abs(height) if self.use_abs_height else height
+
+            if confidence < self.min_confidence_percent:
+                return
+
+            if z_for_filter < self.min_height_m:
+                return
+
             # Publish message
             radar_detection_msg = RadarDetection()
             radar_detection_msg.header = Header()
@@ -151,9 +195,9 @@ class RadarNode(Node):
             radar_detection_msg.distance = (dist_long**2 + dist_lat**2) ** 0.5
 
             self.publisher_.publish(radar_detection_msg)
-            self.get_logger().info(
-                f"Radar target ID={target_id}, Distance={radar_detection_msg.distance}"
-            )
+            # self.get_logger().info(
+            #     f"Radar target ID={target_id}, Distance={radar_detection_msg.distance}"
+            # )
 
         except Exception as e:
             self.get_logger().error(f"Error publishing radar detection: {e}")

@@ -57,7 +57,7 @@ class TestRadarNode(unittest.TestCase):
         """Destroy the RadarNode after each test."""
         self.radar_node.destroy_node()
 
-    def create_radar_data(self, x, y, z, frame_id, speed):
+    def create_radar_data(self, x, y, z, frame_id, speed, confidence_percent=100.0):
         """Create a CAN-message format radar frame."""
         cluster_id = frame_id  # Cluster ID: 0-255 (8 bits)
         dist_long = x  # Longitudinal distance in meters
@@ -69,7 +69,9 @@ class TestRadarNode(unittest.TestCase):
         msg0 = can.Message(arbitration_id=0x701, data=frame0, is_extended_id=False)
 
         # Frame 1: height
-        frame1 = self.format_frame1(cluster_id, height)
+        frame1 = self.format_frame1(
+            cluster_id, height, confidence_percent=confidence_percent
+        )
         msg1 = can.Message(arbitration_id=0x701, data=frame1, is_extended_id=False)
 
         return msg0, msg1
@@ -105,9 +107,14 @@ class TestRadarNode(unittest.TestCase):
         return bytes(frame)
 
     @staticmethod
-    def format_frame1(cluster_id, height):
+    def format_frame1(cluster_id, height, confidence_percent=100.0):
         """Format frame 1 of radar detection message."""
         height_scaled = int((height + 30) / 0.1) & 0x03FF  # height range [-30, 70]
+
+        # The radar node decodes confidence from byte7 bits 0..5 as (raw * 5.0) percent.
+        # Pick a raw value that yields at least the requested confidence.
+        raw_conf = int(round(float(confidence_percent) / 5.0))
+        raw_conf = max(0, min(0x3F, raw_conf))
 
         frame = bytearray(8)
 
@@ -123,16 +130,20 @@ class TestRadarNode(unittest.TestCase):
         frame[4] = 0x00
         frame[5] = 0x00
         frame[6] = 0x00
-        frame[7] = 0x00
+        frame[7] = raw_conf & 0x3F
 
         return bytes(frame)
 
     def test_radar_node(self):
         """Ensure that radar data is correctly extracted and published."""
-        x, y, z = 3.0, 12.0, 0.0
+        # The node filters detections by default (min_confidence_percent=90,
+        # min_height_m=0.6), so use values that pass.
+        x, y, z = 3.0, 12.0, 1.0
         frame_id = 1
         speed = 2
-        frame0, frame1 = self.create_radar_data(x, y, z, frame_id, speed)
+        frame0, frame1 = self.create_radar_data(
+            x, y, z, frame_id, speed, confidence_percent=100.0
+        )
         self.radar_node.process_radar_data(frame0)
         self.radar_node.process_radar_data(frame1)
 

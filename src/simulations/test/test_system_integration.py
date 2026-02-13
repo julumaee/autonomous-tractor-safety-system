@@ -33,10 +33,7 @@ from tractor_safety_system_interfaces.msg import ControlCommand, FusedDetection
 
 @pytest.mark.rostest
 def generate_test_description():
-    """
-    Launch all necessary nodes for the integration test.
-    """
-
+    """Launch all necessary nodes for the integration test."""
     object_simulator = Node(
         package="simulations",
         executable="object_simulator",

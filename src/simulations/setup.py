@@ -62,6 +62,8 @@ setup(
             "visualize_tracks = simulations.gazebo.visualize_tracks:main",
             "ego_odom_sim = simulations.gazebo.ego_odom_sim:main",
             "detection_logger = simulations.logging_tools.detection_logger:main",
+            "real_world_logger = simulations.logging_tools.real_world_logger:main",
+            "gps_ego_motion = simulations.logging_tools.gps_ego_motion:main",
             "pedestrian_gt_bridge = simulations.gazebo.pedestrian_gt_bridge:main",
             "scripted_driver = simulations.gazebo.scripted_driver:main",
         ],
