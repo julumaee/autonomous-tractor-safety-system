@@ -27,6 +27,8 @@ ntrip_client/
 # Runtime / local artifacts
 real_world_logs/
 testing_tools/calibration_log/
+testing_tools/sr75_test.log
+testing_tools/sr75_test_2.log
 rtcm.bin
 
 # Extracted Debian source artifacts (local debugging only)
