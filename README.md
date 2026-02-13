@@ -39,13 +39,13 @@ repo/
 │   ├── simulations/
 │   ├── tractor_control/
 │   └── tractor_safety_system_interfaces/
-├── analysis_tools/
-└── run_all_simulation_scenarios.sh
+└── testing_tools/
+    ├── analysis_tools/
 ```
 
 Package/directories:
 
-- `src/camera_interface/` – interface from camera/YOLO to target messages
+- `src/camera_interface/` – interface from OAK-D camera detections to target messages
 - `src/radar_interface/` – interface from Nanoradar SR75 (CAN) to target messages
 - `src/sensor_fusion/` – decision-level radar–camera fusion + tracking
 - `src/safety_monitor/` – simple safety logic (distance thresholds, etc.)
@@ -53,8 +53,9 @@ Package/directories:
 - `src/tractor_control/` – interface to tractor control (real or sim)
 - `src/tractor_safety_system_interfaces/` – shared message definitions
 - `src/simulations/` – Gazebo models, worlds, launch and logging tools
-- `analysis_tools/` – Python scripts to analyse logged data
-- `run_all_simulation_scenarios.sh` – helper script to run all Gazebo scenarios
+- `testing_tools/analysis_tools/` – Python scripts to analyse logged data
+- `testing_tools/run_all_simulation_scenarios.sh` – helper script to run all Gazebo scenarios
+- `testing_tools/REAL_WORLD_TESTING_GUIDE.md` – comprehensive guide for real-world tractor testing
 
 ---
 
@@ -68,13 +69,14 @@ Core:
 
 Real sensors (optional):
 
-- Luxonis **OAK-D** camera via `depthai-ros`
-- **Nanoradar SR75** 4D radar via CAN (e.g., PEAK USB-CAN)
+- Luxonis **OAK-D S2** camera via `depthai-ros` (uses built-in neural network for object detection)
+- **Nanoradar SR75** 4D radar via CAN (e.g., Kvaser USB-CAN adapter)
 
-Simulation perception (required for simulation scenarios):
+Simulation perception (required for simulation scenarios only):
 
 - **Ultralytics YOLO** tracker node via `ultralytics_ros` (typically from a separate `~/yolo_ws` workspace and its Python venv)
-    - Can be replaced with alternative object detection algorithms
+    - Used only for Gazebo simulation camera processing
+    - Not needed for real-world testing with OAK-D camera
 
 Analysis (optional):
 
@@ -101,30 +103,38 @@ source install/setup.bash
 
 ## Sensor interfaces
 
-### Camera (OAK-D / depthai-ros)
+### Camera (OAK-D S2 / depthai-ros)
 
-The camera interface is configured for `depthai-ros` running a YOLO example (e.g., YOLOv4 publisher):
+The camera interface is configured for the **OAK-D S2** camera with `depthai-ros` driver. The OAK-D performs **on-device neural network inference** for object detection using its built-in VPU.
+
+Launch the camera driver:
 
 ```bash
-ros2 launch depthai_examples yolov4_publisher.launch.py   camera_model:=OAK-D   spatial_camera:=true
+ros2 launch tractor_safety_system_launch perception_stack.launch.py start_camera_driver:=true
+```
+
+Or launch the camera driver separately:
+
+```bash
+ros2 launch depthai_ros_driver rgbd_pcl.launch.py
 ```
 
 `camera_interface` typically:
 
-- Subscribes to YOLO detection + depth/spatial topics
+- Subscribes to camera detection topics (with spatial/depth information)
 - Converts detections into **3D target positions** in the tractor base frame
 - Publishes a list of camera targets for fusion/tracking
 
-If you use another camera/detector, adapt `camera_interface` to match your topics and TF frames.
+The OAK-D's built-in neural network eliminates the need for external YOLO processing when using real hardware.
 
 ### Radar (Nanoradar SR75 over CAN)
 
 The radar interface expects SR75 track data over CAN.
 
-Example CAN setup for a PEAK USB device:
+Example CAN setup for a Kvaser USB device:
 
 ```bash
-sudo modprobe peak_usb
+sudo modprobe kvaser_usb
 sudo ip link set can0 up type can bitrate 1000000
 
 # verify incoming frames
@@ -227,7 +237,7 @@ A helper script can launch all scenarios and log data:
 
 ```bash
 cd ~/ros2_ws/src/<this-repo>
-bash run_all_simulation_scenarios.sh
+bash testing_tools/run_all_simulation_scenarios.sh
 ```
 
 This script is intended to:
@@ -242,7 +252,7 @@ Check the script for topic names and output paths and adjust as needed.
 
 ## Analysis tools
 
-`analysis_tools/` contains Python scripts to evaluate detection and tracking performance from CSV logs.
+`testing_tools/analysis_tools/` contains Python scripts to evaluate detection and tracking performance from CSV logs.
 
 Typical inputs per scenario:
 
@@ -266,7 +276,7 @@ Typical analysis steps:
 Example usage (script names may differ):
 
 ```bash
-cd analysis_tools
+cd testing_tools/analysis_tools
 
 python3 analyze_scenario_static.py   --scenario S1   --raw path/to/raw_detections.csv   --fused path/to/fused_detections.csv   --tracks path/to/tracks.csv   --ego path/to/ego_odometry.csv   --out_prefix plots/S1
 ```
@@ -294,18 +304,23 @@ This repository is intended for research and development. It is **not** a certif
 
 ## Quick command reference (ROS 2 / CAN / Simulation)
 
-The following snippets are a practical “cheat sheet” for running the radar, virtual CAN, Gazebo simulation, and YOLO on a typical development machine.
+The following snippets are a practical "cheat sheet" for running the radar, CAN interface, and Gazebo simulation on a typical development machine.
 
 > Notes:
 > - Replace `WORKSPACE` with your ROS 2 workspace path (e.g. `~/ros2_ws`).
-> - The YOLO stack is assumed to live in `~/yolo_ws` (adjust if different).
-> - You typically need **two terminals** when running Gazebo + YOLO (one for each environment).
+> - The YOLO stack (for **simulation only**) is assumed to live in `~/yolo_ws` (adjust if different).
+> - For **real-world testing**, the OAK-D camera has built-in neural network processing (no YOLO needed).
+> - You typically need **two terminals** when running Gazebo simulation (one for simulation, one for YOLO).
 
-### Radar over CAN (PEAK USB-CAN)
+### Radar over CAN (Kvaser USB-CAN)
 
 ```bash
-sudo modprobe peak_usb
+# For Kvaser adapter
+sudo modprobe kvaser_usb
 sudo ip link set can0 up type can bitrate 1000000
+
+# Verify CAN frames
+candump can0
 ```
 
 ### Virtual CAN (vcan0) for simulated CAN traffic
@@ -349,7 +364,9 @@ ros2 launch tractor_safety_system_launch safety_stack.launch.py
 # ros2 launch simulations safety_system_core.launch.py
 ```
 
-### YOLOv8 object detection (ultralytics-ros)
+### YOLOv8 object detection (ultralytics-ros) - Simulation Only
+
+> **Note:** This is only required for **Gazebo simulation scenarios**. Real-world testing uses the OAK-D camera's built-in neural network.
 
 ```bash
 source install/setup.bash
@@ -390,6 +407,6 @@ cd WORKSPACE
 source install/setup.bash
 source ~/yolo_ws/install/setup.bash
 
-chmod +x run_all_simulation_scenarios.sh
-./run_all_simulation_scenarios.sh
+chmod +x testing_tools/run_all_simulation_scenarios.sh
+./testing_tools/run_all_simulation_scenarios.sh
 ```
