@@ -29,6 +29,10 @@ setup(
     license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
-        "console_scripts": [],
+        "console_scripts": [
+            "navsatfix_rate_limiter = tractor_safety_system_launch.navsatfix_rate_limiter:main",
+            "ntrip_gga_publisher = tractor_safety_system_launch.ntrip_gga_publisher:main",
+            "ntrip_tcp_client = tractor_safety_system_launch.ntrip_tcp_client:main",
+        ],
     },
 )

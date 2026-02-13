@@ -11,6 +11,9 @@
   <depend>launch</depend>
   <depend>launch_ros</depend>
   <depend>tf2_ros</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nmea_msgs</depend>
+  <depend>rtcm_msgs</depend>
 
   <!-- Pipeline packages -->
   <exec_depend>camera_interface</exec_depend>

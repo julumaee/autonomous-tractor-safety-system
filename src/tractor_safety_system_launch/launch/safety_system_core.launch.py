@@ -66,6 +66,7 @@ def generate_launch_description():
     start_camera = LaunchConfiguration("start_camera")
     start_control = LaunchConfiguration("start_control")
     publish_tf = LaunchConfiguration("publish_tf")
+    can_channel = LaunchConfiguration("can_channel")
 
     # TF values (base_link -> camera_link)
     cam_x = LaunchConfiguration("camera_tf_x")
@@ -105,6 +106,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "params": params,
+            "can_channel": can_channel,
             "start_tracker": start_tracker,
             "start_radar": start_radar,
             "start_camera": start_camera,
@@ -148,6 +150,11 @@ def generate_launch_description():
         [
             params_arg,
             # Launch args
+            DeclareLaunchArgument(
+                "can_channel",
+                default_value="can0",
+                description="SocketCAN channel for radar (e.g., can0, vcan0)",
+            ),
             DeclareLaunchArgument(
                 "start_tracker",
                 default_value="true",

@@ -1,0 +1,33 @@
+# Workspace-owned u-blox ZED-F9P rover configuration for ROS 2 Jazzy.
+#
+# Reference: ArduSimple Jazzy tutorial uses ublox_gps + ntrip_client and forwards
+# RTCM from /rtcm into the ublox driver via the `rtcm_input` parameter.
+
+ublox_gps_node:
+  ros__parameters:
+    debug: 0
+
+    # Serial device. Can be overridden at launch time.
+    device: /dev/ttyACM0
+
+    # Frame used in published messages.
+    frame_id: gps
+
+    # Where the ublox node listens for RTCM correction messages.
+    # NTRIP client should publish to this topic.
+    rtcm_input: /rtcm
+
+    # UART1 is typically where RTCM is injected for rover setups.
+    uart1:
+      baudrate: 115200
+      in: 32   # RTCM 3
+      out: 0
+
+    # Rover mode (survey-in disabled). If configuring a base, this differs.
+    tmode3: 0
+
+    inf:
+      all: true
+
+    publish:
+      all: true
