@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from collections import deque
 import math
 
 import numpy as np
@@ -22,9 +22,116 @@ from rclpy.node import Node
 from tractor_safety_system_interfaces.msg import FusedDetection, FusedDetectionArray
 
 
-def rot2d(theta):
-    c, s = math.cos(theta), math.sin(theta)
-    return np.array([[c, -s], [s, c]], dtype=float)
+class EgoPoseBuffer:
+    """Keep a short history of ego poses for time-aligning detections."""
+
+    def __init__(self, history_seconds: float):
+        self.history_seconds = float(history_seconds)
+        self.x = 0.0
+        self.y = 0.0
+        self.yaw = 0.0
+
+        self._hist = deque()  # (t_sec, x, y, yaw)
+        self._last_t = None
+
+        # Latest twist for small extrapolation
+        self.last_v = 0.0
+        self.last_yaw_rate = 0.0
+
+    @staticmethod
+    def _wrap_angle(a: float) -> float:
+        return (a + math.pi) % (2 * math.pi) - math.pi
+
+    @staticmethod
+    def _angle_lerp(a0: float, a1: float, w: float) -> float:
+        da = EgoPoseBuffer._wrap_angle(a1 - a0)
+        return EgoPoseBuffer._wrap_angle(a0 + w * da)
+
+    def _integrate(self, v: float, yaw_rate: float, dt: float) -> None:
+        """Integrate ego pose using a body-frame twist over dt seconds."""
+        if dt <= 0.0:
+            return
+
+        dx_body = float(v) * dt
+        dth = float(yaw_rate) * dt
+
+        c = math.cos(self.yaw)
+        s = math.sin(self.yaw)
+        self.x += c * dx_body
+        self.y += s * dx_body
+        self.yaw = self._wrap_angle(self.yaw + dth)
+
+    def ingest_twist(self, t: float, v: float, yaw_rate: float) -> None:
+        """Update internal pose using a timestamped body-frame twist."""
+        t = float(t)
+        v = float(v)
+        yaw_rate = float(yaw_rate)
+
+        self.last_v = v
+        self.last_yaw_rate = yaw_rate
+
+        if self._last_t is None:
+            self._last_t = t
+            self._hist.append((t, self.x, self.y, self.yaw))
+            return
+
+        dt = t - self._last_t
+        if 0.0 < dt < 5.0:
+            self._integrate(v, yaw_rate, dt)
+            self._last_t = t
+            self._hist.append((t, self.x, self.y, self.yaw))
+
+            # Prune history
+            min_t = t - max(1.0, self.history_seconds)
+            while self._hist and self._hist[0][0] < min_t:
+                self._hist.popleft()
+            return
+
+        if dt >= 5.0:
+            # Large time jump: reset anchor without integrating.
+            self._last_t = t
+            self._hist.append((t, self.x, self.y, self.yaw))
+
+    def pose_at(self, t: float):
+        """Return (x, y, yaw) at time t (seconds), with small extrapolation."""
+        t = float(t)
+        if not self._hist:
+            return (self.x, self.y, self.yaw)
+
+        t_last, x_last, y_last, yaw_last = self._hist[-1]
+        if t >= t_last:
+            dt = t - t_last
+            if dt <= 0.0:
+                return (x_last, y_last, yaw_last)
+            dt = min(dt, 1.0)  # cap extrapolation
+            dx_body = float(self.last_v) * dt
+            dth = float(self.last_yaw_rate) * dt
+            c = math.cos(yaw_last)
+            s = math.sin(yaw_last)
+            x = x_last + c * dx_body
+            y = y_last + s * dx_body
+            yaw = self._wrap_angle(yaw_last + dth)
+            return (x, y, yaw)
+
+        t0, x0, y0, yaw0 = self._hist[0]
+        if t <= t0:
+            return (x0, y0, yaw0)
+
+        prev = self._hist[0]
+        for cur in self._hist:
+            if cur[0] >= t:
+                t1, x1, y1, yaw1 = cur
+                t0, x0, y0, yaw0 = prev
+                if t1 <= t0:
+                    return (x1, y1, yaw1)
+                w = (t - t0) / (t1 - t0)
+                x = x0 + w * (x1 - x0)
+                y = y0 + w * (y1 - y0)
+                yaw = self._angle_lerp(yaw0, yaw1, w)
+                return (x, y, yaw)
+            prev = cur
+
+        return (x_last, y_last, yaw_last)
 
 
 class Track:
@@ -72,6 +179,24 @@ class EgoKFTracker(Node):
         self.declare_parameter("update_rate", 20.0)  # Hz
         self.declare_parameter("enable_ego_drag", True)
 
+        # --- Time alignment
+        self.declare_parameter(
+            "measurement_latency", 0.0
+        )  # seconds; subtract from detection stamp when transforming
+        self.declare_parameter("pose_history_seconds", 10.0)
+
+        # --- Measurement noise (per-axis std in meters)
+        self.declare_parameter("R_meas_fused_xy", 0.3)
+        self.declare_parameter("R_meas_camera_xy", 0.6)
+        self.declare_parameter("R_meas_radar_xy", 0.4)
+
+        # --- Ego-motion covariance usage
+        self.declare_parameter("use_twist_covariance", True)
+        self.declare_parameter("q_yaw_rate_scale", 2.0)
+        self.declare_parameter("q_twist_cov_scale", 2.0)
+        self.declare_parameter("ref_yaw_rate_std", 0.3)  # rad/s
+        self.declare_parameter("ref_speed_std", 0.5)  # m/s
+
         # Read params
         self.L = float(self.get_parameter("wheelbase").value)
         self.k_steer = float(self.get_parameter("steer_unit_per_rad").value)
@@ -80,7 +205,6 @@ class EgoKFTracker(Node):
         self.max_yaw_rate = float(self.get_parameter("max_yaw_rate").value)
 
         self.sigma_accel = float(self.get_parameter("sigma_accel").value)
-        self.R_meas = (float(self.get_parameter("R_meas_xy").value) ** 2) * np.eye(2)
         self.gate_chi2 = float(self.get_parameter("gate_chi2").value)
 
         self.spawn_hits = int(self.get_parameter("spawn_hits").value)
@@ -91,9 +215,28 @@ class EgoKFTracker(Node):
         self.dt_nom = 1.0 / float(self.get_parameter("update_rate").value)
         self.enable_ego_drag = bool(self.get_parameter("enable_ego_drag").value)
 
+        self.measurement_latency = float(self.get_parameter("measurement_latency").value)
+        self.pose_history_seconds = float(
+            self.get_parameter("pose_history_seconds").value
+        )
+
+        self.R_meas_default = (float(self.get_parameter("R_meas_xy").value) ** 2) * np.eye(2)
+        self.R_meas_fused = (float(self.get_parameter("R_meas_fused_xy").value) ** 2) * np.eye(2)
+        self.R_meas_camera = (float(self.get_parameter("R_meas_camera_xy").value) ** 2) * np.eye(2)
+        self.R_meas_radar = (float(self.get_parameter("R_meas_radar_xy").value) ** 2) * np.eye(2)
+
+        self.use_twist_covariance = bool(
+            self.get_parameter("use_twist_covariance").value
+        )
+        self.q_yaw_rate_scale = float(self.get_parameter("q_yaw_rate_scale").value)
+        self.q_twist_cov_scale = float(self.get_parameter("q_twist_cov_scale").value)
+        self.ref_yaw_rate_std = float(self.get_parameter("ref_yaw_rate_std").value)
+        self.ref_speed_std = float(self.get_parameter("ref_speed_std").value)
+
         self.ego_x = 0.0
         self.ego_y = 0.0
         self.ego_yaw = 0.0
+        self._ego_pose_buf = EgoPoseBuffer(self.pose_history_seconds)
 
         # Subscriptions
         self.sub_det = self.create_subscription(
@@ -118,8 +261,12 @@ class EgoKFTracker(Node):
 
         # Latest motion
         self.u_v = 0.0  # m/s
-        self.u_delta = 0.0  # rad
+        self.u_delta = 0.0  # rad/s (yaw rate)
         self.u_stamp = None
+
+        # Covariance (from /ego_motion)
+        self.u_var_vx = None
+        self.u_var_yaw_rate = None
 
         self.get_logger().info("KF tracker running.")
 
@@ -127,23 +274,55 @@ class EgoKFTracker(Node):
 
     def on_detection(self, msg: FusedDetection):
         """Receive and store a fused detection in ego frame."""
-        position_ego = np.array([msg.position.x, msg.position.y], dtype=float)
-        position_world = self.ego_to_world_pos(position_ego)
         stamp = msg.header.stamp
-        source = msg.detection_type
+        det_t = float(stamp.sec) + float(stamp.nanosec) * 1e-9
+        query_t = det_t - float(self.measurement_latency)
+        ego_pose = self.get_ego_pose_at(query_t)
+
+        position_ego = np.array([msg.position.x, msg.position.y], dtype=float)
+        position_world = self.ego_to_world_pos(position_ego, ego_pose=ego_pose)
+
+        source = str(msg.detection_type).casefold().strip()
+        Rm = self.get_measurement_covariance(source)
         # store immediately in a small buffer for this cycle
         # Simple approach: push onto a list; the timer will consume and clear.
         if not hasattr(self, "_meas_buf"):
             self._meas_buf = []
-        self._meas_buf.append((position_world, self.R_meas, stamp, source))
+        self._meas_buf.append((position_world, Rm, stamp, source))
 
     def on_ego_odom(self, twist_msg: TWCS):
         """Receive ego vehicle twist (body frame)."""
-        self.u_v = float(twist_msg.twist.twist.linear.x)
-        self.u_delta = float(twist_msg.twist.twist.angular.z)
-        self.u_stamp = (
-            twist_msg.header.stamp.sec + twist_msg.header.stamp.nanosec * 1e-9
+        t = float(twist_msg.header.stamp.sec) + float(twist_msg.header.stamp.nanosec) * 1e-9
+        v = float(twist_msg.twist.twist.linear.x)
+        yaw_rate = float(twist_msg.twist.twist.angular.z)
+
+        # Covariance: TwistWithCovariance uses 6x6 row-major.
+        # We use vx variance (0,0) and wz variance (5,5).
+        cov = twist_msg.twist.covariance
+        try:
+            var_vx = float(cov[0])
+            var_yaw_rate = float(cov[35])
+        except Exception:
+            var_vx = None
+            var_yaw_rate = None
+
+        # Integrate ego pose using message timestamps and keep a short pose history.
+        self._ego_pose_buf.ingest_twist(t, v, yaw_rate)
+        self.ego_x, self.ego_y, self.ego_yaw = (
+            self._ego_pose_buf.x,
+            self._ego_pose_buf.y,
+            self._ego_pose_buf.yaw,
         )
+
+        # Store latest motion for extrapolation/process-noise scaling
+        self.u_v = v
+        self.u_delta = yaw_rate
+        self.u_stamp = t
+        self.u_var_vx = var_vx
+        self.u_var_yaw_rate = var_yaw_rate
+
+    def get_ego_pose_at(self, t: float):
+        return self._ego_pose_buf.pose_at(t)
 
     def publish_tracks(self):
         """Publish confirmed tracks in ego (base_link) frame."""
@@ -173,57 +352,46 @@ class EgoKFTracker(Node):
             track_array.detections.append(msg)
         self.pub_tracks.publish(track_array)
 
-    def update_ego_pose(self, dt: float) -> None:
-        """
-        Integrate ego pose in a local world (odometry) frame.
+    def get_measurement_covariance(self, source: str) -> np.ndarray:
+        src = str(source).casefold().strip()
+        if src == "fused":
+            return self.R_meas_fused
+        if src == "camera":
+            return self.R_meas_camera
+        if src == "radar":
+            return self.R_meas_radar
+        return self.R_meas_default
 
-        use current body-frame twist:
-        v = self.u_v [m/s], yaw_rate = self.u_delta [rad/s].
-        """
-        if dt <= 0.0:
-            return
-
-        v = float(self.u_v)  # forward speed in base_link
-        yaw_rate = float(self.u_delta)  # THIS IS YAW RATE [rad/s], NOT steering angle
-
-        # small-step integration in ego/body frame
-        dx_body = v * dt
-        dy_body = 0.0
-        dth = yaw_rate * dt
-
-        # rotate body displacement into world frame using current heading
-        c = math.cos(self.ego_yaw)
-        s = math.sin(self.ego_yaw)
-        dx_world = c * dx_body - s * dy_body
-        dy_world = s * dx_body + c * dy_body
-
-        # update ego pose in world frame
-        self.ego_x += dx_world
-        self.ego_y += dy_world
-        self.ego_yaw += dth
-
-    def ego_to_world_pos(self, p_ego: np.ndarray) -> np.ndarray:
+    def ego_to_world_pos(self, p_ego: np.ndarray, ego_pose=None) -> np.ndarray:
         """
         Convert a 2D position from ego (base_link) to world (odometry) frame.
 
         p_ego: shape (2,)
         """
-        c = math.cos(self.ego_yaw)
-        s = math.sin(self.ego_yaw)
+        if ego_pose is None:
+            x, y, yaw = self.ego_x, self.ego_y, self.ego_yaw
+        else:
+            x, y, yaw = ego_pose
+        c = math.cos(yaw)
+        s = math.sin(yaw)
         R = np.array([[c, -s], [s, c]], dtype=float)
-        t = np.array([self.ego_x, self.ego_y], dtype=float)
+        t = np.array([x, y], dtype=float)
         return t + R @ p_ego
 
-    def world_to_ego_pos(self, p_world: np.ndarray) -> np.ndarray:
+    def world_to_ego_pos(self, p_world: np.ndarray, ego_pose=None) -> np.ndarray:
         """
         Convert a 2D position from world (odometry) to ego (base_link) frame.
 
         p_world: shape (2,)
         """
-        c = math.cos(self.ego_yaw)
-        s = math.sin(self.ego_yaw)
+        if ego_pose is None:
+            x, y, yaw = self.ego_x, self.ego_y, self.ego_yaw
+        else:
+            x, y, yaw = ego_pose
+        c = math.cos(yaw)
+        s = math.sin(yaw)
         R_T = np.array([[c, s], [-s, c]], dtype=float)
-        t = np.array([self.ego_x, self.ego_y], dtype=float)
+        t = np.array([x, y], dtype=float)
         return R_T @ (p_world - t)
 
     def ego_to_world_vel(self, v_ego: np.ndarray) -> np.ndarray:
@@ -259,8 +427,8 @@ class EgoKFTracker(Node):
 
         dt = max(1e-3, now - self.last_timer_stamp)
 
-        # 1. Update ego pose
-        self.update_ego_pose(dt)
+        # 1. Ego pose is integrated from /ego_motion timestamps.
+        #    (Detections are transformed using pose-at-stamp from the history.)
 
         # 2. KF predict for all tracks over dt
         if self.tracks:
@@ -287,30 +455,45 @@ class EgoKFTracker(Node):
         #                           f'vel=({tr.x[2]:.2f},{tr.x[3]:.2f}) '
         #                           f'hits={tr.hits} miss={tr.miss} age={tr.age}')
 
-    # ------------------ Ego dead-reckoning ------------------
-
-    def integrate_twist(v, yaw_rate, dt):
-        """Dead-reckon pose change over dt given body-frame twist."""
-        # motion expressed in the *previous* body frame
-        dx = v * dt  # move forward in body x
-        dy = 0.0  # no lateral motion in body frame
-        dth = yaw_rate * dt  # heading change
-
-        return dx, dy, dth
-
     # ------------------ KF predict/update ------------------
 
     def kf_predict_all(self, dt):
         """KF predict step for all tracks over dt."""
         # Constant-velocity model with discrete white accel noise
         a = self.sigma_accel  # Acceleration std
+
+        scale = 1.0
+        if self.enable_ego_drag:
+            yaw_norm = 0.0
+            if self.max_yaw_rate > 1e-6:
+                yaw_norm = min(1.0, abs(float(self.u_delta)) / float(self.max_yaw_rate))
+            scale *= 1.0 + float(self.q_yaw_rate_scale) * yaw_norm
+
+            if self.use_twist_covariance:
+                cov_norm = 0.0
+                if self.u_var_yaw_rate is not None and self.u_var_yaw_rate >= 0.0:
+                    yaw_rate_std = math.sqrt(float(self.u_var_yaw_rate))
+                    if self.ref_yaw_rate_std > 1e-6:
+                        cov_norm = max(
+                            cov_norm,
+                            min(1.0, yaw_rate_std / float(self.ref_yaw_rate_std)),
+                        )
+                if self.u_var_vx is not None and self.u_var_vx >= 0.0:
+                    speed_std = math.sqrt(float(self.u_var_vx))
+                    if self.ref_speed_std > 1e-6:
+                        cov_norm = max(
+                            cov_norm,
+                            min(1.0, speed_std / float(self.ref_speed_std)),
+                        )
+                scale *= 1.0 + float(self.q_twist_cov_scale) * cov_norm
+
         # State transition matrix:
         F = np.array(
             [[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]], dtype=float
         )
         q = a * a  # Acceleration variance
         # Process noise covariance:
-        Q = q * np.array(
+        Q = (q * scale) * np.array(
             [
                 [dt**4 / 4, 0, dt**3 / 2, 0],
                 [0, dt**4 / 4, 0, dt**3 / 2],
