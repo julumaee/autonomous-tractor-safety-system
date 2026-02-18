@@ -2,7 +2,7 @@
 
 ![System architecture](Figures/system_architecture.png)
 
-ROS 2 packages for a **retrofit** autonomous tractor safety system that uses **automotive radar + camera** to detect and track pedestrians in front of a tractor. The system is designed as a modular perception + safety pipeline, runnable both with real sensors and in Gazebo simulation.
+ROS 2 packages for a **retrofit** autonomous tractor safety system that uses **automotive radar + camera** to detect and track obstacles in front of a tractor. The system is designed as a modular perception + safety pipeline, runnable both with real sensors and in Gazebo simulation.
 
 > **Important**  
 > This is a **research prototype**, not a certified safety system.  
@@ -12,36 +12,7 @@ This work was carried out at the **University of Oulu** as part of the **KATI** 
 
 ---
 
-## What’s inside
-
-High-level pipeline:
-
-- `camera_interface` → camera detections → target list
-- `radar_interface` → radar detections → target list
-- `sensor_fusion` → decision-level fusion + Kalman tracking
-- `safety_monitor` → safety decisions (warning / slow / stop)
-- `tractor_control` → interface to tractor control (sim or real)
-
----
-
 ## Repository structure
-
-Simplified top-level layout:
-
-```text
-repo/
-├── src/
-│   ├── camera_interface/
-│   ├── navigation_interface/
-│   ├── radar_interface/
-│   ├── safety_monitor/
-│   ├── sensor_fusion/
-│   ├── simulations/
-│   ├── tractor_control/
-│   └── tractor_safety_system_interfaces/
-└── testing_tools/
-    ├── analysis_tools/
-```
 
 Package/directories:
 
@@ -51,11 +22,10 @@ Package/directories:
 - `src/safety_monitor/` – simple safety logic (distance thresholds, etc.)
 - `src/navigation_interface/` – navigation / path interface (mainly for sim)
 - `src/tractor_control/` – interface to tractor control (real or sim)
+- `src/tractor_safety_system_launch/` – launch files for the safety system
 - `src/tractor_safety_system_interfaces/` – shared message definitions
 - `src/simulations/` – Gazebo models, worlds, launch and logging tools
-- `testing_tools/analysis_tools/` – Python scripts to analyse logged data
-- `testing_tools/run_all_simulation_scenarios.sh` – helper script to run all Gazebo scenarios
-- `testing_tools/REAL_WORLD_TESTING_GUIDE.md` – comprehensive guide for real-world tractor testing
+- `testing_tools/` – scripts for running test scenarios and analyzing the results
 
 ---
 
@@ -67,10 +37,15 @@ Core:
 - Gazebo (**Harmonic** or compatible) + `ros_gz` bridge
 - `colcon` + CMake toolchain
 
+Gazebo Harmonic installation (Ubuntu):
+
+- Follow the official guide: https://gazebosim.org/docs/harmonic/install_ubuntu/
+- After installing Gazebo, install the ROS ↔ Gazebo bridge for your ROS distro (e.g., `ros-jazzy-ros-gz`).
+
 Real sensors (optional):
 
 - Luxonis **OAK-D S2** camera via `depthai-ros` (uses built-in neural network for object detection)
-- **Nanoradar SR75** 4D radar via CAN (e.g., Kvaser USB-CAN adapter)
+- **Nanoradar SR75** 4D radar via CAN (uses built-in object detection)
 
 Simulation perception (required for simulation scenarios only):
 
@@ -105,19 +80,7 @@ source install/setup.bash
 
 ### Camera (OAK-D S2 / depthai-ros)
 
-The camera interface is configured for the **OAK-D S2** camera with `depthai-ros` driver. The OAK-D performs **on-device neural network inference** for object detection using its built-in VPU.
-
-Launch the camera driver:
-
-```bash
-ros2 launch tractor_safety_system_launch perception_stack.launch.py start_camera_driver:=true
-```
-
-Or launch the camera driver separately:
-
-```bash
-ros2 launch depthai_ros_driver rgbd_pcl.launch.py
-```
+The camera interface is configured for the **OAK-D S2** camera with `depthai-ros` driver. The OAK-D performs **on-device neural network inference** for object detection using its built-in VPU. In order to run the camera with this setup, depthai-ros package must be installed.
 
 `camera_interface` typically:
 
@@ -125,21 +88,11 @@ ros2 launch depthai_ros_driver rgbd_pcl.launch.py
 - Converts detections into **3D target positions** in the tractor base frame
 - Publishes a list of camera targets for fusion/tracking
 
-The OAK-D's built-in neural network eliminates the need for external YOLO processing when using real hardware.
+The OAK-D's built-in neural network eliminates the need for external target detection when using real hardware.
 
 ### Radar (Nanoradar SR75 over CAN)
 
 The radar interface expects SR75 track data over CAN.
-
-Example CAN setup for a Kvaser USB device:
-
-```bash
-sudo modprobe kvaser_usb
-sudo ip link set can0 up type can bitrate 1000000
-
-# verify incoming frames
-candump can0
-```
 
 `radar_interface` typically:
 
@@ -191,7 +144,7 @@ Key points:
   - detections → world frame for updates
   - tracks → converted back to tractor base frame for output
 
-This helps static pedestrians remain approximately static in the body frame even when the tractor follows curved paths.
+This helps static targets remain approximately static in the body frame even when the tractor follows curved paths.
 
 Data association + track management:
 
@@ -209,14 +162,14 @@ Published tracks (confirmed only) typically include:
 
 ## Simulation tools
 
-`src/simulations/` contains Gazebo models, worlds, and launch/logging tools:
+`src/simulations/` contains Gazebo models, worlds, interfaces for testing and simulation, and launch/logging tools:
 
 ```text
 src/simulations/
 ├── config          # scenario & logging configuration
 ├── launch          # launch files (Gazebo + ROS 2)
-├── models          # tractor and pedestrian actors
-├── simulations     # Gazebo helpers & logging tools
+├── models          # models for tractor and pedestrian actors
+├── simulations     # Gazebo helpers, integration test helpers, and logging tools
 └── worlds          # Gazebo world files (S1–S4)
 ```
 
@@ -254,14 +207,14 @@ Check the script for topic names and output paths and adjust as needed.
 
 `testing_tools/analysis_tools/` contains Python scripts to evaluate detection and tracking performance from CSV logs.
 
-Typical inputs per scenario:
+Inputs per scenario:
 
 - raw radar/camera detections
 - fused detections
 - confirmed tracks
 - ego odometry (pose/yaw over time)
 
-Typical analysis steps:
+Analysis steps:
 
 - transform static pedestrian ground-truth positions into tractor frame using ego odometry
 - associate detections/tracks to pedestrians within a distance threshold
@@ -273,12 +226,12 @@ Typical analysis steps:
   - residual track speeds for static pedestrians
 - plot detections/tracks/ground truth in the tractor body frame
 
-Example usage (script names may differ):
+Example usage:
 
 ```bash
 cd testing_tools/analysis_tools
 
-python3 analyze_scenario_static.py   --scenario S1   --raw path/to/raw_detections.csv   --fused path/to/fused_detections.csv   --tracks path/to/tracks.csv   --ego path/to/ego_odometry.csv   --out_prefix plots/S1
+python3 analyze_scenario.py   --scenario S1   --raw path/to/raw_detections.csv   --fused path/to/fused_detections.csv   --tracks path/to/tracks.csv   --ego path/to/ego_odometry.csv   --out_prefix plots/S1
 ```
 
 ---
@@ -314,12 +267,27 @@ The following snippets are a practical "cheat sheet" for running the radar, CAN 
 
 ### Radar over CAN (Kvaser USB-CAN)
 
-```bash
-# For Kvaser adapter
-sudo modprobe kvaser_usb
-sudo ip link set can0 up type can bitrate 1000000
+There are two options to bring up the CAN interface for the Nanoradar SR75.
 
-# Verify CAN frames
+Option A (recommended): use the helper script:
+
+```bash
+cd testing_tools
+./setup_can.sh can0 1000000
+
+# verify incoming frames
+candump can0
+```
+
+Option B: manual bring-up:
+
+```bash
+sudo modprobe kvaser_usb
+sudo ip link set can0 down 2>/dev/null || true
+sudo ip link set can0 type can bitrate 1000000
+sudo ip link set can0 up
+
+# verify incoming frames
 candump can0
 ```
 
@@ -335,6 +303,7 @@ sudo ip link set vcan0 up
 ```
 
 ### Simulation: teleop keyboard
+Can be used to control tractor in simulation. Bridge nodes for control commands must also be used.
 
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
@@ -343,44 +312,140 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ### Simulation: bridges / bring-up
 
 ```bash
-source install/setup.bash
+# Source both workspaces so the sim can subscribe to ultralytics_ros messages
+# (order doesn't matter; source your main workspace last if you want it to take precedence)
 source ~/yolo_ws/install/setup.bash
+source install/setup.bash
+
+# Basic Gazebo bring-up (useful for debugging). This does not start YOLO; run the
+# ultralytics_ros tracker in a separate terminal.
 ros2 launch simulations bring_up_sim.launch.py
 ```
 
 ### Safety system core components
 
 ```bash
-# Recommended: Use the new launch package
-ros2 launch tractor_safety_system_launch safety_system_core.launch.py
+# Most important launch args (common):
+#   params:=/abs/path/to/parameters.yaml
+#   can_channel:=can0|vcan0
+#   start_camera_driver:=true|false
+#   start_camera/start_radar/start_tracker/start_safety_monitor/start_control:=true|false
+#   publish_tf:=true|false
+#   camera_tf_x/y/z/roll/pitch/yaw:=...   (base_link -> camera_link)
+#   radar_tf_x/y/z/roll/pitch/yaw:=...    (base_link -> radar_link)
 
-# Alternative: Launch perception stack only (sensors + fusion)
-ros2 launch tractor_safety_system_launch perception_stack.launch.py
+# Recommended: full system (perception + safety monitor + control)
+ros2 launch tractor_safety_system_launch safety_system_core.launch.py \
+  start_camera_driver:=true \
+  can_channel:=can0 \
+  camera_tf_x:=0.5 camera_tf_y:=0.0 camera_tf_z:=0.9 \
+  camera_tf_roll:=-1.5708 camera_tf_pitch:=0.0 camera_tf_yaw:=-1.5708 \
+  radar_tf_x:=0.6 radar_tf_y:=0.0 radar_tf_z:=0.6 \
+  radar_tf_roll:=0.0 radar_tf_pitch:=0.0 radar_tf_yaw:=0.0
+
+# Example: swap to a custom parameters file
+# ros2 launch tractor_safety_system_launch safety_system_core.launch.py \
+#   params:=/abs/path/to/parameters.yaml
+
+# Example: disable subsystems (debugging)
+# ros2 launch tractor_safety_system_launch safety_system_core.launch.py \
+#   start_control:=false start_safety_monitor:=false
+
+# Alternative: Launch perception stack only (sensor interfaces + fusion + tracking)
+ros2 launch tractor_safety_system_launch perception_stack.launch.py \
+  start_camera_driver:=true \
+  can_channel:=can0 \
+  camera_tf_x:=0.5 camera_tf_y:=0.0 camera_tf_z:=0.9 \
+  camera_tf_roll:=-1.5708 camera_tf_pitch:=0.0 camera_tf_yaw:=-1.5708 \
+  radar_tf_x:=0.6 radar_tf_y:=0.0 radar_tf_z:=0.6
 
 # Alternative: Launch safety stack only (fusion + safety monitor + control)
-ros2 launch tractor_safety_system_launch safety_stack.launch.py
+ros2 launch tractor_safety_system_launch safety_stack.launch.py \
+  start_tracker:=true start_safety_monitor:=true start_control:=true
 
-# Deprecated (still works but forwards to new package):
-# ros2 launch simulations safety_system_core.launch.py
 ```
 
 ### YOLOv8 object detection (ultralytics-ros) - Simulation Only
 
 > **Note:** This is only required for **Gazebo simulation scenarios**. Real-world testing uses the OAK-D camera's built-in neural network.
 
-```bash
-source install/setup.bash
-source ~/yolo_ws/.venv/bin/activate
+This repo’s simulation pipeline expects the ROS 2 package `ultralytics_ros` to be available (it provides the custom message `ultralytics_ros/msg/YoloResult` and the `tracker.launch.xml` launch file).
 
-ros2 launch ultralytics_ros tracker.launch.xml   device:=cpu   yolo_model:=yolov8n.pt   input_topic:=/sim/cam/rgb   result_topic:=/yolo/result   result_image_topic:=/yolo/debug_image
+#### Build `ultralytics_ros` in a separate workspace
+
+Keeping YOLO in its own workspace avoids pulling large Python dependencies (Ultralytics / PyTorch / OpenCV) into your main safety-system workspace.
+
+As of **Ubuntu 24.04 (noble) + ROS 2 Jazzy**, there is typically **no apt binary** for `ultralytics_ros`, so install from source.
+
+1) Create a workspace and clone `ultralytics_ros`:
+
+```bash
+mkdir -p ~/yolo_ws/src
+cd ~/yolo_ws/src
+
+# ROS 2 branch (works well for Humble; builds on Jazzy if header file includes are updated to .hpp (instead of .h))
+GIT_LFS_SKIP_SMUDGE=1 git clone -b humble-devel https://github.com/Alpaca-zip/ultralytics_ros.git
 ```
 
-### Run the simulator with provided world manually (Gazebo Sim)
+2) Install ROS dependencies and build:
 
 ```bash
-cd WORKSPACE/src/simulations
-export GZ_SIM_RESOURCE_PATH=$GZ_SIM_RESOURCE_PATH:~/playground/src/simulations/models
-gz sim worlds/simple_field.sdf
+cd ~/yolo_ws
+source /opt/ros/jazzy/setup.bash
+rosdep update
+rosdep install -r -y -i --from-paths src
+colcon build --symlink-install
+```
+
+3) Install Python dependencies for the tracker node:
+
+```bash
+python3 -m venv --system-site-packages ~/yolo_ws/.venv
+source ~/yolo_ws/.venv/bin/activate
+python3 -m pip install -U pip
+
+# Install Ultralytics (and its Python dependencies).
+# If you run into OpenCV / CUDA / torch issues, follow the upstream ultralytics_ros README.
+python3 -m pip install -U setuptools wheel
+python3 -m pip install ultralytics
+```
+
+4) Verify the message type is visible:
+
+```bash
+source ~/yolo_ws/install/setup.bash
+ros2 interface show ultralytics_ros/msg/YoloResult
+```
+
+#### Run the YOLO tracker (Terminal 1)
+
+Typical command (exact launch file may differ depending on the upstream repo/version):
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/yolo_ws/install/setup.bash
+
+# If you created a venv for Python deps
+source ~/yolo_ws/.venv/bin/activate
+
+ros2 launch ultralytics_ros tracker.launch.xml
+```
+
+> Licensing note: the upstream `Alpaca-zip/ultralytics_ros` repository is AGPL-licensed. Keeping it in a separate workspace is usually preferable to vendoring it into this repo.
+
+### Run Gazebo manually (optional)
+
+If you launch scenarios via `ros2 launch simulations ...`, you should *not* need to set `GZ_SIM_RESOURCE_PATH` manually.
+
+If you want to run Gazebo directly, point `GZ_SIM_RESOURCE_PATH` at the *installed* models directory:
+
+```bash
+source install/setup.bash
+
+SIM_SHARE="$(ros2 pkg prefix simulations)/share/simulations"
+export GZ_SIM_RESOURCE_PATH="${GZ_SIM_RESOURCE_PATH:-}:$SIM_SHARE/models"
+
+gz sim "$SIM_SHARE/worlds/simple_field.sdf"
 ```
 
 ### Run one scenario (S1–S4)
@@ -389,8 +454,10 @@ Prerequisite: start the **Ultralytics YOLO tracker** (`ultralytics_ros`) in **an
 
 ```bash
 cd WORKSPACE
-source install/setup.bash
+
+# Source both so the sim can import/deserialize ultralytics_ros messages
 source ~/yolo_ws/install/setup.bash
+source install/setup.bash
 
 ros2 launch simulations run_experiment_sim.launch.py scenario:=SCENARIO
 ```
@@ -404,9 +471,15 @@ Prerequisite: start the **Ultralytics YOLO tracker** (`ultralytics_ros`) in **an
 
 ```bash
 cd WORKSPACE
-source install/setup.bash
-source ~/yolo_ws/install/setup.bash
 
-chmod +x testing_tools/run_all_simulation_scenarios.sh
-./testing_tools/run_all_simulation_scenarios.sh
+# Source both so the sim can import/deserialize ultralytics_ros messages
+source ~/yolo_ws/install/setup.bash
+source install/setup.bash
+
+bash testing_tools/run_all_simulation_scenarios.sh
 ```
+
+## See also (real-world)
+
+- [testing_tools/REAL_WORLD_TESTING_GUIDE.md](testing_tools/REAL_WORLD_TESTING_GUIDE.md): step-by-step field workflow (bring-up, test procedure, and what to verify).
+- [testing_tools/CALIBRATION.md](testing_tools/CALIBRATION.md): how to collect calibration data and generate TF values to use in launches.
