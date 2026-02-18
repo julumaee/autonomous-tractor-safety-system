@@ -38,6 +38,7 @@ fi
 mkdir -p calibration_log
 
 DEFAULT_DURATION=60
+DEFAULT_START_DELAY=0
 GROUND_TRUTH_FILE="calibration_log/ground_truth.csv"
 GROUND_TRUTH_TEMPLATE_FILE="calibration_log/ground_truth_template.csv"
 COMBINED_FILE="calibration_log/calibration_raw_combined.csv"
@@ -93,6 +94,9 @@ case "$choice" in
         read -r -p "Duration per target in seconds [${DEFAULT_DURATION}]: " per_target_duration
         per_target_duration=${per_target_duration:-$DEFAULT_DURATION}
 
+        read -r -p "Start delay before logging each target (seconds) [${DEFAULT_START_DELAY}]: " start_delay
+        start_delay=${start_delay:-$DEFAULT_START_DELAY}
+
         for i in $(seq 1 "$num_targets"); do
             echo ""
             echo "=========================================="
@@ -105,9 +109,9 @@ case "$choice" in
             fi
 
             if [[ "$i" -eq 1 && ! -f "${COMBINED_FILE}" ]]; then
-                python3 sensor_calibration.py --mode collect --duration "$per_target_duration" --target-name "$target_name"
+                python3 sensor_calibration.py --mode collect --duration "$per_target_duration" --start-delay "$start_delay" --target-name "$target_name"
             else
-                python3 sensor_calibration.py --mode collect --duration "$per_target_duration" --target-name "$target_name" --append
+                python3 sensor_calibration.py --mode collect --duration "$per_target_duration" --start-delay "$start_delay" --target-name "$target_name" --append
             fi
 
             if [[ "$i" -lt "$num_targets" ]]; then
@@ -127,7 +131,11 @@ case "$choice" in
     3)
         read -r -p "Collection duration seconds [${DEFAULT_DURATION}]: " duration
         duration=${duration:-$DEFAULT_DURATION}
-        python3 sensor_calibration.py --mode collect --duration "$duration"
+
+        read -r -p "Start delay before logging (seconds) [${DEFAULT_START_DELAY}]: " start_delay
+        start_delay=${start_delay:-$DEFAULT_START_DELAY}
+
+        python3 sensor_calibration.py --mode collect --duration "$duration" --start-delay "$start_delay"
         ;;
 
     4)
@@ -159,7 +167,11 @@ case "$choice" in
         fi
         read -r -p "Full calibration duration seconds [${DEFAULT_DURATION}]: " duration
         duration=${duration:-$DEFAULT_DURATION}
-        python3 sensor_calibration.py --mode full --duration "$duration" --ground-truth "${GROUND_TRUTH_FILE}"
+
+        read -r -p "Start delay before logging (seconds) [${DEFAULT_START_DELAY}]: " start_delay
+        start_delay=${start_delay:-$DEFAULT_START_DELAY}
+
+        python3 sensor_calibration.py --mode full --duration "$duration" --start-delay "$start_delay" --ground-truth "${GROUND_TRUTH_FILE}"
         ;;
 
     6)

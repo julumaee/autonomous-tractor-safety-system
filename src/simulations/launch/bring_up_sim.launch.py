@@ -25,7 +25,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_share = get_package_share_path("simulations")
     world_dir = os.path.join(pkg_share, "worlds")
-    models_src_dir = "/home/ekulmala20/playground/src/simulations/models"
+    models_dir = os.path.join(pkg_share, "models")
     # --------------------
     # Common args
     # --------------------
@@ -92,7 +92,13 @@ def generate_launch_description():
 
     # In VMs this can help stability of some image libs (harmless otherwise)
     env_qt_xcb = SetEnvironmentVariable("QT_QPA_PLATFORM", "xcb")
-    env_gz_resources = SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", models_src_dir)
+    existing_gz_resources = os.environ.get("GZ_SIM_RESOURCE_PATH", "")
+    gz_resources = (
+        f"{models_dir}{os.pathsep}{existing_gz_resources}"
+        if existing_gz_resources
+        else models_dir
+    )
+    env_gz_resources = SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", gz_resources)
     # --------------------
     # Gazebo launch
     # --------------------

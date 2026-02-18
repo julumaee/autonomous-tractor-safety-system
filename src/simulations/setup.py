@@ -19,6 +19,28 @@ from setuptools import find_packages, setup
 
 package_name = "simulations"
 
+
+def _collect_data_files(base_dir: str, package_name: str):
+    """
+    Collect files under base_dir preserving subdirectory structure.
+
+    Returns a list of (install_dir, [files...]) tuples suitable for setuptools
+    `data_files`.
+    """
+    base_dir = base_dir.rstrip(os.sep)
+    install_map: dict[str, list[str]] = {}
+    for root, _, files in os.walk(base_dir):
+        if not files:
+            continue
+        rel_dir = os.path.relpath(root, ".")
+        install_dir = os.path.join("share", package_name, rel_dir)
+        for filename in files:
+            src_path = os.path.join(root, filename)
+            if os.path.isfile(src_path):
+                install_map.setdefault(install_dir, []).append(src_path)
+    return sorted(install_map.items())
+
+
 setup(
     name=package_name,
     version="0.0.0",
@@ -38,7 +60,8 @@ setup(
             f"share/{package_name}/worlds",
             [p for p in glob("worlds/*.sdf") if os.path.isfile(p)],
         ),
-    ],
+    ]
+    + _collect_data_files("models", package_name),
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="eemil",

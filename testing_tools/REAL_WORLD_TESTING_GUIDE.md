@@ -1,7 +1,9 @@
 # Real-World Tractor Testing - Complete Guide
 
 **Last Updated:** February 13, 2026  \
-**System:** Autonomous Tractor Safety System (Radar + Camera + GPS)
+**System:** Autonomous Tractor Safety System (Radar + Camera)
+
+**Note:** GPS/GNSS (including RTK) is **testing-only** in this repo: it can be used as a substitute ego-motion source when tractor ECU odometry/IMU is unavailable. It is not a design requirement for the safety pipeline.
 
 This guide provides a script-first workflow for:
 - Calibrating sensor transforms (radar + camera)
@@ -59,6 +61,7 @@ Use the full calibration guide here:
 
 Important:
 - Sequential calibration uses `target_name` matching; your `--target-name` values must match the `target_name` column in `calibration_log/ground_truth.csv`.
+- If you need time to walk into place before logging, use `--start-delay 10` (or set it in the interactive `run_calibration.sh` prompts).
 - When calibration prints final TF values (including roll/pitch/yaw), use those same numbers in the real-world test bring-up.
 
 ---

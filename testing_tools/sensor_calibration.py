@@ -55,11 +55,19 @@ from tractor_safety_system_interfaces.msg import CameraDetection, RadarDetection
 class CalibrationDataCollector(Node):
     """Collects sensor data for calibration."""
 
-    def __init__(self, duration: int = 30, target_name: str = None, append_mode: bool = False):
+    def __init__(
+        self,
+        duration: int = 30,
+        target_name: str = None,
+        append_mode: bool = False,
+        start_delay_s: float = 0.0,
+    ):
         super().__init__("calibration_data_collector")
 
         self.duration = duration
-        self.start_time = time.time()
+        self.start_delay_s = max(0.0, float(start_delay_s))
+        self._warmup_end_wall_time = time.time() + self.start_delay_s
+        self.start_time: float | None = None
         self.target_name = target_name or "unknown"
 
         # Create output directory
@@ -107,9 +115,11 @@ class CalibrationDataCollector(Node):
         # Timer to check duration
         self.timer = self.create_timer(1.0, self.check_duration)
 
-        self.get_logger().info(
-            f"Starting calibration data collection for {duration} seconds"
-        )
+        if self.start_delay_s > 0.0:
+            self.get_logger().info(
+                f"Warmup: logging will start in {self.start_delay_s:.1f}s"
+            )
+        self.get_logger().info(f"Logging duration: {duration} seconds")
         self.get_logger().info(f"Target: {self.target_name}")
         self.get_logger().info(f"Output file: {self.filename}")
         if append_mode:
@@ -118,8 +128,26 @@ class CalibrationDataCollector(Node):
             "Keep target stationary at the designated position"
         )
 
+    def _logging_active(self) -> bool:
+        return self.start_time is not None
+
+    def _maybe_start_logging(self) -> None:
+        if self._logging_active():
+            return
+
+        if time.time() < self._warmup_end_wall_time:
+            return
+
+        self.start_time = time.time()
+        self.get_logger().info(
+            f"Logging started. Collecting for {self.duration}s..."
+        )
+
     def radar_callback(self, msg: RadarDetection):
         """Handle radar detections."""
+        self._maybe_start_logging()
+        if not self._logging_active():
+            return
         timestamp = self.get_clock().now().nanoseconds / 1e9
         self.writer.writerow([
             timestamp,
@@ -134,6 +162,9 @@ class CalibrationDataCollector(Node):
 
     def camera_callback(self, msg: CameraDetection):
         """Handle camera detections."""
+        self._maybe_start_logging()
+        if not self._logging_active():
+            return
         timestamp = self.get_clock().now().nanoseconds / 1e9
         self.writer.writerow([
             timestamp,
@@ -148,6 +179,18 @@ class CalibrationDataCollector(Node):
 
     def check_duration(self):
         """Check if collection duration has elapsed."""
+        if not self._logging_active():
+            remaining_warmup = self._warmup_end_wall_time - time.time()
+            if remaining_warmup > 0:
+                self.get_logger().info(
+                    f"Warmup... {remaining_warmup:.0f}s until logging starts | "
+                    f"Radar: {self.radar_count} | Camera: {self.camera_count}"
+                )
+                return
+
+            self._maybe_start_logging()
+            return
+
         elapsed = time.time() - self.start_time
         remaining = self.duration - elapsed
 
@@ -728,6 +771,15 @@ def main():
         help="Data collection duration in seconds (default: 30)"
     )
     parser.add_argument(
+        "--start-delay",
+        type=float,
+        default=0.0,
+        help=(
+            "Seconds to wait before starting to log samples (default: 0). "
+            "Useful to walk into position before logging begins."
+        ),
+    )
+    parser.add_argument(
         "--data",
         type=str,
         help="Path to collected data CSV file (for analyze mode)"
@@ -777,14 +829,18 @@ def main():
             print("3. Keep tractor stationary during collection")
             print("4. Record target positions in ground_truth.csv")
 
-        print("\nStarting collection in 3 seconds...")
-        time.sleep(3)
+        if args.start_delay and args.start_delay > 0:
+            print(f"\nStarting node now. Logging will begin after {args.start_delay:.1f}s...")
+        else:
+            print("\nStarting collection in 3 seconds...")
+            time.sleep(3)
 
         rclpy.init()
         collector = CalibrationDataCollector(
             duration=args.duration,
             target_name=args.target_name,
-            append_mode=args.append
+            append_mode=args.append,
+            start_delay_s=args.start_delay,
         )
         try:
             rclpy.spin(collector)

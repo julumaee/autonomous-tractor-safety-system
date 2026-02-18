@@ -85,19 +85,19 @@ Do NOT start: safety_monitor, tracker, or navigation.
 # Select option 2 (Sequential calibration)
 ```
 
-**Manual mode**:
+**Manual mode with delay**:
 ```bash
 # Position 1: Walk to first mark (5m), stand still, face tractor
-python3 sensor_calibration.py --mode collect --duration 15 --target-name pos_5m
+python3 sensor_calibration.py --mode collect --duration 15 --start-delay 10 --target-name pos_5m
 
 # Position 2: Walk to 10m mark, stand still
-python3 sensor_calibration.py --mode collect --duration 15 --target-name pos_10m --append
+python3 sensor_calibration.py --mode collect --duration 15 --start-delay 10 --target-name pos_10m --append
 
 # Position 3: Walk to 15m mark, stand still
-python3 sensor_calibration.py --mode collect --duration 15 --target-name pos_15m --append
+python3 sensor_calibration.py --mode collect --duration 15 --start-delay 10 --target-name pos_15m --append
 
 # Position 4: Walk to 5m left mark, stand still
-python3 sensor_calibration.py --mode collect --duration 15 --target-name pos_5m_left --append
+python3 sensor_calibration.py --mode collect --duration 15 --start-delay 10 --target-name pos_5m_left --append
 ```
 
 ### Step 4: Analyze
