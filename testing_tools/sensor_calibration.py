@@ -225,6 +225,12 @@ class CalibrationAnalyzer:
         self.ground_truth_by_name: dict[str, np.ndarray] = {}
         self.ground_truth_order: list[str] = []
 
+        # Optional initial guesses for transforms (can be set externally)
+        self.radar_init_translation: np.ndarray | None = None
+        self.radar_init_rotation: np.ndarray | None = None
+        self.camera_init_translation: np.ndarray | None = None
+        self.camera_init_rotation: np.ndarray | None = None
+
         # Load sensor data
         self.radar_data = []
         self.camera_data = []
@@ -261,9 +267,15 @@ class CalibrationAnalyzer:
                     if has_target_name and target_name:
                         self.radar_points_by_target.setdefault(target_name, []).append(point)
                 elif sensor_type == 'camera':
-                    self.camera_data.append(point)
+                    # Camera data arrives in optical frame (x right, y down, z forward)
+                    # Convert to base_link-like frame for proper calibration
+                    # base_x = z_cam, base_y = -x_cam, base_z = -y_cam
+                    x_c, y_c, z_c = point
+                    point_to_store = np.array([z_c, -x_c, -y_c], dtype=float)
+
+                    self.camera_data.append(point_to_store)
                     if has_target_name and target_name:
-                        self.camera_points_by_target.setdefault(target_name, []).append(point)
+                        self.camera_points_by_target.setdefault(target_name, []).append(point_to_store)
 
         print(f"Loaded {len(self.radar_data)} radar points")
         print(f"Loaded {len(self.camera_data)} camera points")
@@ -276,11 +288,6 @@ class CalibrationAnalyzer:
 
     def is_sequential(self) -> bool:
         return len(self.target_order) > 0
-
-    def _centroids_from_targets(self, points_by_target: dict[str, list[np.ndarray]]) -> list[np.ndarray]:
-        """Compute one centroid per target using the CSV target order."""
-        centroids, _ = self._centroids_from_targets_with_names(points_by_target)
-        return centroids
 
     @staticmethod
     def _normalize_label(label: str) -> str:
@@ -298,70 +305,62 @@ class CalibrationAnalyzer:
                 return value
         return None
 
-    def _dominant_cluster_centroid(
-        self,
-        points: list[np.ndarray],
-        eps: float = 0.4,
-        min_samples: int = 5,
-    ) -> tuple[np.ndarray, float]:
-        """Return centroid of the dominant spatial cluster and inlier ratio.
-
-        This is designed for sequential calibration where the radar may produce
-        false targets while only one true target is present.
+    def _gate_detections_by_distance(self, target_name: str, points: list[np.ndarray]) -> list[np.ndarray]:
+        """Filter detections to keep only those within 20% of ground truth distance.
+        
+        The gating threshold is: distance from detection to ground truth < 0.2 * distance from origin to ground truth.
+        This provides distance-adaptive gating (tighter at close range, looser at far range).
         """
         if len(points) == 0:
-            raise ValueError("No points")
-
-        data = np.asarray(points)
-        try:
-            from sklearn.cluster import DBSCAN  # type: ignore
-
-            labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(data)
-            # choose largest non-noise cluster
-            best_label = None
-            best_count = 0
-            for label in set(labels.tolist()):
-                if label == -1:
-                    continue
-                count = int((labels == label).sum())
-                if count > best_count:
-                    best_label = label
-                    best_count = count
-            if best_label is None:
-                # fallback to robust centroid
-                median = np.median(data, axis=0)
-                d = np.linalg.norm(data - median, axis=1)
-                keep = d <= np.quantile(d, 0.8)
-                kept = data[keep] if keep.any() else data
-                return np.mean(kept, axis=0), float(len(kept)) / float(len(data))
-
-            inliers = data[labels == best_label]
-            return np.mean(inliers, axis=0), float(len(inliers)) / float(len(data))
-        except ModuleNotFoundError:
-            # No scikit-learn: robust fallback based on median + trimming.
-            median = np.median(data, axis=0)
-            d = np.linalg.norm(data - median, axis=1)
-            keep = d <= np.quantile(d, 0.8)
-            kept = data[keep] if keep.any() else data
-            return np.mean(kept, axis=0), float(len(kept)) / float(len(data))
+            return []
+        
+        # Get expected ground truth position for this target
+        expected_pos = self._lookup_ground_truth(target_name)
+        if expected_pos is None:
+            # No ground truth for this target, return all points
+            return points
+        
+        # Calculate distance from origin to ground truth
+        distance_to_truth = np.linalg.norm(expected_pos)
+        
+        # Gating threshold: 20% of distance to ground truth
+        threshold = 0.2 * distance_to_truth
+        
+        # Filter points
+        gated_points = []
+        for point in points:
+            distance_from_expected = np.linalg.norm(point - expected_pos)
+            if distance_from_expected <= threshold:
+                gated_points.append(point)
+        
+        return gated_points
 
     def _centroids_from_targets_with_names(
         self,
         points_by_target: dict[str, list[np.ndarray]],
     ) -> tuple[list[np.ndarray], list[str]]:
-        """Compute one centroid per target (dominant cluster) in target_order."""
+        """Compute one centroid per target using distance-based gating."""
         centroids: list[np.ndarray] = []
         names: list[str] = []
         for target_name in self.target_order:
             points = points_by_target.get(target_name, [])
             if len(points) == 0:
                 continue
-            centroid, inlier_ratio = self._dominant_cluster_centroid(points)
-            if inlier_ratio < 0.5:
-                print(
-                    f"Warning: '{target_name}' inlier ratio is low ({inlier_ratio:.0%}); "
-                    "false targets/noise may dominate. Consider recollecting this target."
-                )
+            
+            # Apply distance-based gating
+            gated_points = self._gate_detections_by_distance(target_name, points)
+            
+            if len(gated_points) == 0:
+                print(f"Warning: '{target_name}' has no detections after gating")
+                continue
+            
+            # Calculate centroid of gated points
+            centroid = np.mean(np.array(gated_points), axis=0)
+            
+            # Report gating effectiveness
+            filtered_ratio = 100 * len(gated_points) / len(points)
+            print(f"  {target_name}: {len(gated_points)}/{len(points)} detections kept ({filtered_ratio:.1f}%)")
+            
             centroids.append(centroid)
             names.append(target_name)
         return centroids, names
@@ -391,45 +390,11 @@ class CalibrationAnalyzer:
         if len(self.ground_truth_by_name) > 0:
             print(f"Ground truth labels: {self.ground_truth_order}")
 
-    def cluster_detections(self, data: List[np.ndarray], eps: float = 0.5) -> List[np.ndarray]:
-        """
-        Cluster detections to identify distinct targets.
-
-        Args:
-            data: List of 3D points
-            eps: Maximum distance between points in same cluster (meters)
-            
-        Returns:
-            List of cluster centroids
-        """
-        if len(data) == 0:
-            return []
-
-        try:
-            from sklearn.cluster import DBSCAN
-        except ModuleNotFoundError as exc:
-            raise ModuleNotFoundError(
-                "scikit-learn is required for non-sequential clustering analysis. "
-                "Install it with: pip3 install -r calibration_requirements.txt"
-            ) from exc
-
-        data_array = np.array(data)
-        clustering = DBSCAN(eps=eps, min_samples=3).fit(data_array)
-
-        centroids = []
-        for label in set(clustering.labels_):
-            if label == -1:  # Skip noise
-                continue
-            cluster_points = data_array[clustering.labels_ == label]
-            centroid = np.mean(cluster_points, axis=0)
-            centroids.append(centroid)
-
-        return centroids
-
     def calculate_sensor_offset(
         self, 
         sensor_points: List[np.ndarray],
         reference_points: List[np.ndarray],
+        initial_translation: np.ndarray = None,
         initial_rotation: np.ndarray = None
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -441,6 +406,7 @@ class CalibrationAnalyzer:
         Args:
             sensor_points: Points detected by sensor (in sensor frame)
             reference_points: Known reference positions (in base_link frame)
+            initial_translation: Optional initial guess for [x, y, z] in meters
             initial_rotation: Optional initial guess for [roll, pitch, yaw] in radians
 
         Returns:
@@ -474,14 +440,19 @@ class CalibrationAnalyzer:
             return error.flatten()
 
         # Initial guess: [x, y, z, roll, pitch, yaw]
-        # Use provided rotation if given, otherwise zero
-        if initial_rotation is not None:
-            x0 = np.array([0.0, 0.0, 0.0, 
-                          initial_rotation[0], 
-                          initial_rotation[1], 
-                          initial_rotation[2]])
+        # Use provided translation if given, otherwise defaults to zero
+        if initial_translation is not None:
+            x0_trans = initial_translation
         else:
-            x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            x0_trans = np.array([0.0, 0.0, 0.0])
+        
+        # Use provided rotation if given, otherwise defaults to zero
+        if initial_rotation is not None:
+            x0_rot = initial_rotation
+        else:
+            x0_rot = np.array([0.0, 0.0, 0.0])
+        
+        x0 = np.concatenate([x0_trans, x0_rot])
 
         # Optimize
         result = least_squares(transform_error, x0, method='lm')
@@ -498,6 +469,35 @@ class CalibrationAnalyzer:
 
         return translation, rotation
 
+    @staticmethod
+    def _compose_camera_with_optical_frame(rotation_calibrated: np.ndarray) -> np.ndarray:
+        """Compose calibrated camera rotation with fixed optical frame correction.
+        
+        The camera data is converted during loading using the fixed optical-to-base transform:
+        - roll = -π/2, pitch = 0, yaw = -π/2
+        
+        This function composes the fixed correction with the calibrated rotation using
+        proper rotation matrix multiplication (not linear addition).
+        
+        Args:
+            rotation_calibrated: [roll, pitch, yaw] rotation computed by calibration
+            
+        Returns:
+            rotation_total: [roll, pitch, yaw] with optical frame correction applied
+        """
+        OPTICAL_FRAME_CORRECTION = np.array([-np.pi/2, 0.0, -np.pi/2])
+        
+        # Compose rotations using matrix multiplication (mathematically correct)
+        # R_total = R_fixed @ R_calibrated
+        R_fixed = Rotation.from_euler('xyz', OPTICAL_FRAME_CORRECTION).as_matrix()
+        R_calibrated = Rotation.from_euler('xyz', rotation_calibrated).as_matrix()
+        R_total = R_fixed @ R_calibrated
+        
+        # Convert back to Euler angles
+        rotation_total = Rotation.from_matrix(R_total).as_euler('xyz')
+        
+        return rotation_total
+
     def analyze_radar(self):
         """Analyze radar data and calculate transform."""
         print("\n" + "="*60)
@@ -508,82 +508,77 @@ class CalibrationAnalyzer:
             print("No radar data found!")
             return None
 
-        radar_cluster_names: list[str] | None = None
+        # Require sequential mode (target_name column) for proper gating
+        if not self.is_sequential():
+            print("ERROR: Radar analysis requires sequential calibration data (target_name column)")
+            print("Please collect data using: python3 sensor_calibration.py --mode collect --target-name <name> --append")
+            return None
 
-        # Sequential mode: use per-target centroids (dominant cluster per target)
-        if self.is_sequential():
-            radar_clusters, radar_cluster_names = self._centroids_from_targets_with_names(
-                self.radar_points_by_target
-            )
-            print(f"\nSequential mode: computed {len(radar_clusters)} radar centroids")
-        else:
-            radar_clusters = self.cluster_detections(self.radar_data, eps=0.5)
-        print(f"\nIdentified {len(radar_clusters)} radar targets")
+        if len(self.ground_truth) == 0:
+            print("ERROR: Ground truth file required for radar analysis")
+            return None
+
+        radar_clusters, radar_cluster_names = self._centroids_from_targets_with_names(
+            self.radar_points_by_target
+        )
+        print(f"\nIdentified {len(radar_clusters)} radar targets (after distance-based gating)")
 
         for i, centroid in enumerate(radar_clusters):
             label = f"Target {i+1}" if not radar_cluster_names else radar_cluster_names[i]
             print(f"  {label}: x={centroid[0]:.2f}m, y={centroid[1]:.2f}m, "
                   f"z={centroid[2]:.2f}m")
 
-        if len(self.ground_truth) > 0:
-            if self.is_sequential() and len(radar_clusters) != len(self.ground_truth):
-                print(
-                    "\nWarning: sequential target count does not match ground truth count. "
-                    f"targets={len(radar_clusters)} ground_truth={len(self.ground_truth)}"
-                )
-                print("Tip: collect targets in the same order as rows in ground_truth.csv")
+        if len(radar_clusters) == 0:
+            print("No valid radar targets after gating!")
+            return None
 
-            # Calculate optimal transform
-            print("\nCalculating radar transform...")
-            if self.is_sequential() and len(self.ground_truth_by_name) > 0:
-                radar_centroids = radar_clusters
-                centroid_names = radar_cluster_names or []
-                sensor_points: list[np.ndarray] = []
-                reference_points: list[np.ndarray] = []
-                for name, centroid in zip(centroid_names, radar_centroids):
-                    ref = self._lookup_ground_truth(name)
-                    if ref is None:
-                        print(
-                            f"Warning: no ground truth label matches '{name}'. "
-                            "Falling back to order-based matching for this point."
-                        )
-                        continue
-                    sensor_points.append(centroid)
-                    reference_points.append(ref)
+        if len(radar_clusters) != len(self.ground_truth):
+            print(
+                "\nWarning: radar target count does not match ground truth count. "
+                f"targets={len(radar_clusters)} ground_truth={len(self.ground_truth)}"
+            )
+            print("Tip: collect targets in the same order as rows in ground_truth.csv")
 
-                if len(sensor_points) >= 3:
-                    translation, rotation = self.calculate_sensor_offset(
-                        sensor_points, reference_points
-                    )
-                else:
-                    print(
-                        "Not enough name-matched targets (need >=3). Falling back to order-based matching."
-                    )
-                    translation, rotation = self.calculate_sensor_offset(
-                        radar_clusters, self.ground_truth
-                    )
-            else:
-                translation, rotation = self.calculate_sensor_offset(
-                    radar_clusters, self.ground_truth
-                )
-            
-            print(f"\nOptimal Radar Transform (base_link -> radar_link):")
-            print(f"  Translation: x={translation[0]:.3f}, y={translation[1]:.3f}, "
-                  f"z={translation[2]:.3f} (meters)")
-            print(f"  Rotation: roll={rotation[0]:.4f}, pitch={rotation[1]:.4f}, "
-                  f"yaw={rotation[2]:.4f} (radians)")
-            print(f"  Rotation: roll={np.rad2deg(rotation[0]):.2f}°, "
-                  f"pitch={np.rad2deg(rotation[1]):.2f}°, "
-                  f"yaw={np.rad2deg(rotation[2]):.2f}°")
+        # Calculate optimal transform
+        print("\nCalculating radar transform...")
+        radar_centroids = radar_clusters
+        centroid_names = radar_cluster_names or []
+        sensor_points: list[np.ndarray] = []
+        reference_points: list[np.ndarray] = []
+        
+        for name, centroid in zip(centroid_names, radar_centroids):
+            ref = self._lookup_ground_truth(name)
+            if ref is None:
+                print(f"Warning: no ground truth label matches '{name}'")
+                continue
+            sensor_points.append(centroid)
+            reference_points.append(ref)
 
-            return {
-                'translation': translation,
-                'rotation': rotation,
-                'clusters': radar_clusters
-            }
-        else:
-            print("\nNo ground truth provided. Showing detected clusters only.")
-            return {'clusters': radar_clusters}
+        if len(sensor_points) < 3:
+            print("ERROR: Need at least 3 matched targets for transform calculation")
+            return None
+
+        translation, rotation = self.calculate_sensor_offset(
+            sensor_points, 
+            reference_points,
+            initial_translation=self.radar_init_translation,
+            initial_rotation=self.radar_init_rotation
+        )
+        
+        print(f"\nOptimal Radar Transform (base_link -> radar_link):")
+        print(f"  Translation: x={translation[0]:.3f}, y={translation[1]:.3f}, "
+              f"z={translation[2]:.3f} (meters)")
+        print(f"  Rotation: roll={rotation[0]:.4f}, pitch={rotation[1]:.4f}, "
+              f"yaw={rotation[2]:.4f} (radians)")
+        print(f"  Rotation: roll={np.rad2deg(rotation[0]):.2f}°, "
+              f"pitch={np.rad2deg(rotation[1]):.2f}°, "
+              f"yaw={np.rad2deg(rotation[2]):.2f}°")
+
+        return {
+            'translation': translation,
+            'rotation': rotation,
+            'clusters': radar_clusters
+        }
 
     def analyze_camera(self):
         """Analyze camera data and calculate transform."""
@@ -595,94 +590,86 @@ class CalibrationAnalyzer:
             print("No camera data found!")
             return None
 
-        camera_cluster_names: list[str] | None = None
+        # Require sequential mode (target_name column) for proper gating
+        if not self.is_sequential():
+            print("ERROR: Camera analysis requires sequential calibration data (target_name column)")
+            print("Please collect data using: python3 sensor_calibration.py --mode collect --target-name <name> --append")
+            return None
 
-        # Sequential mode: use per-target centroids (dominant cluster per target)
-        if self.is_sequential():
-            camera_clusters, camera_cluster_names = self._centroids_from_targets_with_names(
-                self.camera_points_by_target
-            )
-            print(f"\nSequential mode: computed {len(camera_clusters)} camera centroids")
-        else:
-            camera_clusters = self.cluster_detections(self.camera_data, eps=0.5)
-        print(f"\nIdentified {len(camera_clusters)} camera targets")
+        if len(self.ground_truth) == 0:
+            print("ERROR: Ground truth file required for camera analysis")
+            return None
+
+        camera_clusters, camera_cluster_names = self._centroids_from_targets_with_names(
+            self.camera_points_by_target
+        )
+        print(f"\nIdentified {len(camera_clusters)} camera targets (after distance-based gating)")
 
         for i, centroid in enumerate(camera_clusters):
             label = f"Target {i+1}" if not camera_cluster_names else camera_cluster_names[i]
             print(f"  {label}: x={centroid[0]:.2f}m, y={centroid[1]:.2f}m, "
                   f"z={centroid[2]:.2f}m")
 
-        if len(self.ground_truth) > 0:
-            if self.is_sequential() and len(camera_clusters) != len(self.ground_truth):
-                print(
-                    "\nWarning: sequential target count does not match ground truth count. "
-                    f"targets={len(camera_clusters)} ground_truth={len(self.ground_truth)}"
-                )
-                print("Tip: collect targets in the same order as rows in ground_truth.csv")
+        if len(camera_clusters) == 0:
+            print("No valid camera targets after gating!")
+            return None
 
-            # Calculate optimal transform
-            print("\nCalculating camera transform...")
+        if len(camera_clusters) != len(self.ground_truth):
+            print(
+                "\nWarning: camera target count does not match ground truth count. "
+                f"targets={len(camera_clusters)} ground_truth={len(self.ground_truth)}"
+            )
+            print("Tip: collect targets in the same order as rows in ground_truth.csv")
 
-            # OAK-D camera has known frame rotations (not calibrated, they're geometric)
-            # Roll=-90°, Yaw=-90° are standard for OAK-D mounting
-            initial_camera_rotation = np.array([-np.pi/2, 0.0, -np.pi/2])  # roll, pitch, yaw
-            print("  Using known OAK-D frame rotations as initial guess")
-            
-            if self.is_sequential() and len(self.ground_truth_by_name) > 0:
-                camera_centroids = camera_clusters
-                centroid_names = camera_cluster_names or []
-                sensor_points: list[np.ndarray] = []
-                reference_points: list[np.ndarray] = []
-                for name, centroid in zip(centroid_names, camera_centroids):
-                    ref = self._lookup_ground_truth(name)
-                    if ref is None:
-                        print(
-                            f"Warning: no ground truth label matches '{name}'. "
-                            "Falling back to order-based matching for this point."
-                        )
-                        continue
-                    sensor_points.append(centroid)
-                    reference_points.append(ref)
+        # Calculate optimal transform
+        print("\nCalculating camera transform...")
 
-                if len(sensor_points) >= 3:
-                    translation, rotation = self.calculate_sensor_offset(
-                        sensor_points,
-                        reference_points,
-                        initial_rotation=initial_camera_rotation,
-                    )
-                else:
-                    print(
-                        "Not enough name-matched targets (need >=3). Falling back to order-based matching."
-                    )
-                    translation, rotation = self.calculate_sensor_offset(
-                        camera_clusters,
-                        self.ground_truth,
-                        initial_rotation=initial_camera_rotation,
-                    )
-            else:
-                translation, rotation = self.calculate_sensor_offset(
-                    camera_clusters,
-                    self.ground_truth,
-                    initial_rotation=initial_camera_rotation,
-                )
+        camera_centroids = camera_clusters
+        centroid_names = camera_cluster_names or []
+        sensor_points: list[np.ndarray] = []
+        reference_points: list[np.ndarray] = []
+        
+        for name, centroid in zip(centroid_names, camera_centroids):
+            ref = self._lookup_ground_truth(name)
+            if ref is None:
+                print(f"Warning: no ground truth label matches '{name}'")
+                continue
+            sensor_points.append(centroid)
+            reference_points.append(ref)
 
-            print(f"\nOptimal Camera Transform (base_link -> camera_link):")
-            print(f"  Translation: x={translation[0]:.3f}, y={translation[1]:.3f}, "
-                  f"z={translation[2]:.3f} (meters)")
-            print(f"  Rotation: roll={rotation[0]:.4f}, pitch={rotation[1]:.4f}, "
-                  f"yaw={rotation[2]:.4f} (radians)")
-            print(f"  Rotation: roll={np.rad2deg(rotation[0]):.2f}°, "
-                  f"pitch={np.rad2deg(rotation[1]):.2f}°, "
-                  f"yaw={np.rad2deg(rotation[2]):.2f}°")
-            
-            return {
-                'translation': translation,
-                'rotation': rotation,
-                'clusters': camera_clusters
-            }
-        else:
-            print("\nNo ground truth provided. Showing detected clusters only.")
-            return {'clusters': camera_clusters}
+        if len(sensor_points) < 3:
+            print("ERROR: Need at least 3 matched targets for transform calculation")
+            return None
+
+        translation, rotation = self.calculate_sensor_offset(
+            sensor_points,
+            reference_points,
+            initial_translation=self.camera_init_translation,
+            initial_rotation=self.camera_init_rotation
+        )
+
+        print(f"\nOptimal Camera Transform (calibrated in base-aligned frame):")
+        print(f"  Translation: x={translation[0]:.3f}, y={translation[1]:.3f}, "
+              f"z={translation[2]:.3f} (meters)")
+        print(f"  Rotation: roll={rotation[0]:.4f}, pitch={rotation[1]:.4f}, "
+              f"yaw={rotation[2]:.4f} (radians)")
+        
+        # Compose with fixed optical frame correction for output
+        rotation_with_optical = self._compose_camera_with_optical_frame(rotation)
+        print(f"\nOptimal Camera Transform (with optical frame correction - FOR TF):")
+        print(f"  Translation: x={translation[0]:.3f}, y={translation[1]:.3f}, "
+              f"z={translation[2]:.3f} (meters)")
+        print(f"  Rotation: roll={rotation_with_optical[0]:.4f}, pitch={rotation_with_optical[1]:.4f}, "
+              f"yaw={rotation_with_optical[2]:.4f} (radians)")
+        print(f"  Rotation: roll={np.rad2deg(rotation_with_optical[0]):.2f}°, "
+              f"pitch={np.rad2deg(rotation_with_optical[1]):.2f}°, "
+              f"yaw={np.rad2deg(rotation_with_optical[2]):.2f}°")
+        
+        return {
+            'translation': translation,
+            'rotation': rotation_with_optical,
+            'clusters': camera_clusters
+        }
 
     def generate_launch_arguments(self, radar_result, camera_result):
         """Generate launch file arguments for the calculated transforms."""
@@ -726,41 +713,13 @@ class CalibrationAnalyzer:
         return radar_result, camera_result
 
 
-def create_ground_truth_template():
-    """Create a ground truth CSV file."""
-    os.makedirs("calibration_log", exist_ok=True)
-    filename = "calibration_log/ground_truth_template.csv"
-
-    # Check if file already exists
-    if os.path.exists(filename):
-        print(f"Warning: {filename} already exists!")
-        response = input("Overwrite? [y/N]: ")
-        if response.lower() != 'y':
-            print("Keeping existing file.")
-            return
-
-    with open(filename, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(["target_name", "x", "y", "z", "description"])
-        writer.writerow(["pos_5m", 5.0, 0.0, 0.0, "5m straight ahead"])
-        writer.writerow(["pos_10m", 10.0, 0.0, 0.0, "10m straight ahead"])
-        writer.writerow(["pos_15m", 15.0, 0.0, 0.0, "15m straight ahead"])
-        writer.writerow(["pos_5m_left", 5.0, 2.0, 0.0, "5m, 2m to the left"])
-
-    print(f"Created: {filename}")
-    print("Edit this file with your actual target positions:")
-    print(f"  nano {filename}")
-    print("Then copy it to calibration_log/ground_truth.csv:")
-    print("  cp calibration_log/ground_truth_template.csv calibration_log/ground_truth.csv")
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Sensor calibration tool for radar and camera"
     )
     parser.add_argument(
         "--mode",
-        choices=["collect", "analyze", "full", "template"],
+        choices=["collect", "analyze", "full"],
         required=True,
         help="Calibration mode: collect data, analyze data, or run full calibration"
     )
@@ -800,13 +759,29 @@ def main():
         action="store_true",
         help="Append to existing calibration data (for sequential calibration with multiple targets)"
     )
+    parser.add_argument(
+        "--radar-init",
+        type=str,
+        action='store',
+        default=None,
+        help=(
+            "Initial radar transform as comma-separated numbers: "
+            "x,y,z or x,y,z,roll,pitch,yaw (radians). Example: --radar-init=0,0,1"
+        ),
+    )
+    parser.add_argument(
+        "--camera-init",
+        type=str,
+        action='store',
+        default=None,
+        help=(
+            "Initial camera transform as comma-separated numbers: "
+            "x,y,z or x,y,z,roll,pitch,yaw (radians). Example: --camera-init=-0.8,0,1.3"
+        ),
+    )
 
     args = parser.parse_args()
     
-    if args.mode == "template":
-        create_ground_truth_template()
-        return
-
     if args.mode == "collect" or args.mode == "full":
         print("\n" + "="*60)
         print("CALIBRATION DATA COLLECTION")
@@ -873,6 +848,42 @@ def main():
             return
 
         analyzer = CalibrationAnalyzer(args.data, args.ground_truth)
+        
+        # Parse initial transform arguments
+        def _parse_init(s: str):
+            """Parse comma-separated init values. Accepts 3 (translation) or 6 (translation+rotation) values."""
+            if s is None:
+                return None, None
+            parts = [float(x.strip()) for x in s.split(",") if x.strip() != ""]
+            if len(parts) == 3:
+                return np.array(parts), None
+            elif len(parts) == 6:
+                return np.array(parts[:3]), np.array(parts[3:])
+            else:
+                raise ValueError(f"Expected 3 or 6 comma-separated numbers, got {len(parts)}")
+        
+        # Set radar initial transform if provided
+        if args.radar_init:
+            try:
+                radar_trans, radar_rot = _parse_init(args.radar_init)
+                analyzer.radar_init_translation = radar_trans
+                analyzer.radar_init_rotation = radar_rot
+                print(f"\n[INFO] Radar initial transform: translation={radar_trans}, rotation={radar_rot}")
+            except Exception as e:
+                print(f"\n[ERROR] Failed to parse --radar-init: {e}")
+                return
+        
+        # Set camera initial transform if provided
+        if args.camera_init:
+            try:
+                camera_trans, camera_rot = _parse_init(args.camera_init)
+                analyzer.camera_init_translation = camera_trans
+                analyzer.camera_init_rotation = camera_rot
+                print(f"[INFO] Camera initial transform: translation={camera_trans}, rotation={camera_rot}")
+            except Exception as e:
+                print(f"[ERROR] Failed to parse --camera-init: {e}")
+                return
+        
         analyzer.run_analysis()
 
 

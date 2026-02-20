@@ -40,7 +40,6 @@ mkdir -p calibration_log
 DEFAULT_DURATION=60
 DEFAULT_START_DELAY=0
 GROUND_TRUTH_FILE="calibration_log/ground_truth.csv"
-GROUND_TRUTH_TEMPLATE_FILE="calibration_log/ground_truth_template.csv"
 COMBINED_FILE="calibration_log/calibration_raw_combined.csv"
 
 echo "=========================================="
@@ -48,30 +47,19 @@ echo "Sensor Calibration Quick Start"
 echo "=========================================="
 echo ""
 echo "Calibration Steps:"
-echo "  1. Create ground truth template"
-echo "  2. Sequential calibration (one target at a time)"
-echo "  3. Collect calibration data (all targets at once)"
-echo "  4. Analyze existing data"
-echo "  5. Full calibration (collect + analyze)"
-echo "  6. Exit"
+echo "  1. Sequential calibration (one target at a time)"
+echo "  2. Analyze existing data"
+echo "  3. Full calibration (collect + analyze)"
+echo "  4. Exit"
 echo ""
 
-read -r -p "Select option [1-6]: " choice
+read -r -p "Select option [1-4]: " choice
 
 case "$choice" in
     1)
-        echo "Creating ground truth template..."
-        python3 sensor_calibration.py --mode template
-        echo ""
-        echo "Edit: ${GROUND_TRUTH_TEMPLATE_FILE}"
-        echo "Then copy it to ${GROUND_TRUTH_FILE}:"
-        echo "  cp ${GROUND_TRUTH_TEMPLATE_FILE} ${GROUND_TRUTH_FILE}"
-        ;;
-
-    2)
         if [[ ! -f "${GROUND_TRUTH_FILE}" ]]; then
             echo "ERROR: ${GROUND_TRUTH_FILE} not found." >&2
-            echo "Create it first (option 1) and fill in your target positions." >&2
+            echo "Create it first by editing: ${GROUND_TRUTH_FILE}" >&2
             exit 1
         fi
 
@@ -108,11 +96,8 @@ case "$choice" in
                 exit 2
             fi
 
-            if [[ "$i" -eq 1 && ! -f "${COMBINED_FILE}" ]]; then
-                python3 sensor_calibration.py --mode collect --duration "$per_target_duration" --start-delay "$start_delay" --target-name "$target_name"
-            else
-                python3 sensor_calibration.py --mode collect --duration "$per_target_duration" --start-delay "$start_delay" --target-name "$target_name" --append
-            fi
+            # Use --append for all targets to build combined file sequentially
+            python3 sensor_calibration.py --mode collect --duration "$per_target_duration" --start-delay "$start_delay" --target-name "$target_name" --append
 
             if [[ "$i" -lt "$num_targets" ]]; then
                 echo ""
@@ -128,17 +113,7 @@ case "$choice" in
         fi
         ;;
 
-    3)
-        read -r -p "Collection duration seconds [${DEFAULT_DURATION}]: " duration
-        duration=${duration:-$DEFAULT_DURATION}
-
-        read -r -p "Start delay before logging (seconds) [${DEFAULT_START_DELAY}]: " start_delay
-        start_delay=${start_delay:-$DEFAULT_START_DELAY}
-
-        python3 sensor_calibration.py --mode collect --duration "$duration" --start-delay "$start_delay"
-        ;;
-
-    4)
+    2)
         latest_file=""
         if [[ -f "${COMBINED_FILE}" ]]; then
             latest_file="${COMBINED_FILE}"
@@ -152,17 +127,33 @@ case "$choice" in
         fi
 
         echo "Analyzing: ${latest_file}"
+        echo ""
+        echo "Optional: Provide initial sensor positions to improve calibration."
+        echo "(Leave blank to use solver defaults)"
+        echo ""
+        
+        read -r -p "Radar initial position [x,y,z] or [x,y,z,roll,pitch,yaw]: " radar_init
+        read -r -p "Camera initial position [x,y,z] or [x,y,z,roll,pitch,yaw]: " camera_init
+        
+        # Build command array to avoid quoting issues
+        cmd=(python3 sensor_calibration.py --mode analyze --data "${latest_file}")
         if [[ -f "${GROUND_TRUTH_FILE}" ]]; then
-            python3 sensor_calibration.py --mode analyze --data "${latest_file}" --ground-truth "${GROUND_TRUTH_FILE}"
-        else
-            python3 sensor_calibration.py --mode analyze --data "${latest_file}"
+            cmd+=(--ground-truth "${GROUND_TRUTH_FILE}")
         fi
+        if [[ -n "${radar_init}" ]]; then
+            cmd+=(--radar-init="${radar_init}")
+        fi
+        if [[ -n "${camera_init}" ]]; then
+            cmd+=(--camera-init="${camera_init}")
+        fi
+        
+        "${cmd[@]}"
         ;;
 
-    5)
+    4)
         if [[ ! -f "${GROUND_TRUTH_FILE}" ]]; then
             echo "ERROR: ${GROUND_TRUTH_FILE} not found." >&2
-            echo "Create it first (option 1) and fill in your target positions." >&2
+            echo "Create it first by editing: ${GROUND_TRUTH_FILE}" >&2
             exit 1
         fi
         read -r -p "Full calibration duration seconds [${DEFAULT_DURATION}]: " duration
@@ -174,7 +165,7 @@ case "$choice" in
         python3 sensor_calibration.py --mode full --duration "$duration" --start-delay "$start_delay" --ground-truth "${GROUND_TRUTH_FILE}"
         ;;
 
-    6)
+    5)
         echo "Exiting..."
         exit 0
         ;;

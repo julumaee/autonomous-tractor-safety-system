@@ -37,23 +37,17 @@ Position 4: 5m, 2m to left       (x=5.0, y=2.0, z=0.0)
 cd ~/autonomous-tractor-safety-system/testing_tools
 source ../install/setup.bash
 
-# Create a template CSV
-python3 sensor_calibration.py --mode template
-
-# Edit with YOUR actual target positions
-nano calibration_log/ground_truth_template.csv
-
-# Save as ground_truth.csv (required for analysis)
-cp calibration_log/ground_truth_template.csv calibration_log/ground_truth.csv
+# Create calibration_log/ground_truth.csv with YOUR actual target positions
+nano calibration_log/ground_truth.csv
 ```
 
 Example (edit to match your marked positions):
 ```csv
-target_name,x,y,z,description
-pos_5m,5.0,0.0,0.0,5m ahead
-pos_10m,10.0,0.0,0.0,10m ahead
-pos_15m,15.0,0.0,0.0,15m ahead
-pos_5m_left,5.0,2.0,0.0,5m left
+x,y,z,description
+5.0,0.0,0.0,pos_5m
+10.0,0.0,0.0,pos_10m
+15.0,0.0,0.0,pos_15m
+5.0,2.0,0.0,pos_5m_left
 ```
 
 Important: in sequential calibration, `target_name` must match the `--target-name` values you used while collecting (e.g., `pos_5m`).
@@ -74,18 +68,18 @@ ros2 launch tractor_safety_system_launch perception_stack.launch.py \
 - `radar_node` - publishes `/radar_detections`
 - `camera_node` - publishes `/camera_detections`
 
-Do NOT start: safety_monitor, tracker, or navigation.
-
 ### Step 3: Collect Data (One Position at a Time)
+
+Choose one of the two ways to run calibration.
 
 **Interactive mode (easiest)**:
 ```bash
 # Back in testing_tools terminal
 ./run_calibration.sh
-# Select option 2 (Sequential calibration)
+# Select option 1 (Sequential calibration)
 ```
 
-**Manual mode with delay**:
+**Manual mode**:
 ```bash
 # Position 1: Walk to first mark (5m), stand still, face tractor
 python3 sensor_calibration.py --mode collect --duration 15 --start-delay 10 --target-name pos_5m
@@ -153,11 +147,8 @@ ros2 topic echo /fused_detections
 
 ### During Calibration
 - ✅ Tractor must be stationary (engine off or parking brake)
-- ✅ Stand very still at each position (15 seconds)
-- ✅ Wear reflective vest
+- ✅ Stand very still at each position
 - ✅ Face the tractor
-- ❌ Do NOT start safety_monitor (it may command stops)
-- ❌ Do NOT start tracker (not needed)
 
 ### Good Calibration Indicators
 - Average error < 0.5m
@@ -195,9 +186,7 @@ cd ~/autonomous-tractor-safety-system/testing_tools
 source ../install/setup.bash
 
 # 1. Create ground truth with your target positions
-python3 sensor_calibration.py --mode template
-nano calibration_log/ground_truth_template.csv  # Edit positions
-cp calibration_log/ground_truth_template.csv calibration_log/ground_truth.csv
+nano calibration_log/ground_truth.csv  # Edit to match your positions
 
 # 2. Start perception (separate terminal)
 cd ~/autonomous-tractor-safety-system
@@ -206,18 +195,21 @@ ros2 launch tractor_safety_system_launch perception_stack.launch.py \
     start_tracker:=false
 
 # 3. Interactive calibration (easiest)
+cd ~/autonomous-tractor-safety-system/testing_tools
 ./run_calibration.sh
-# Select option 2
+# Select option 1 (Sequential calibration)
 
-# 4. Or manual
+# 4. Or manual collection
 python3 sensor_calibration.py --mode collect --duration 15 --target-name pos_5m
 python3 sensor_calibration.py --mode collect --duration 15 --target-name pos_10m --append
 python3 sensor_calibration.py --mode collect --duration 15 --target-name pos_15m --append
+
+# 5. Analyze and get calibrated parameters
 python3 sensor_calibration.py --mode analyze \
     --data calibration_log/calibration_raw_combined.csv \
     --ground-truth calibration_log/ground_truth.csv
 
-# 5. Restart with calculated parameters (from step 4 output)
+# 6. Restart with calculated parameters (from step 5 output)
 ros2 launch tractor_safety_system_launch perception_stack.launch.py \
     radar_tf_x:=1.523 radar_tf_y:=-0.012 radar_tf_z:=0.487 \
     radar_tf_roll:=0.0052 radar_tf_pitch:=0.0123 radar_tf_yaw:=-0.0089 \
