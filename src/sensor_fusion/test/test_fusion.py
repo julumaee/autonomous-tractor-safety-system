@@ -86,6 +86,7 @@ class TestFusionNode(unittest.TestCase):
         msg.position = Point(x=x, y=y, z=z)
         msg.distance = distance
         msg.speed = speed
+        msg.confidence_percent = 100.0
         return msg
 
     def test_fusion_performs_correctly(self):

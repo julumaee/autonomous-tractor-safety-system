@@ -135,9 +135,19 @@ class EgoPoseBuffer:
 
 
 class Track:
-    __slots__ = ("x", "P", "age", "hits", "miss", "id", "last_stamp", "was_updated")
+    __slots__ = (
+        "x",
+        "P",
+        "age",
+        "hits",
+        "miss",
+        "id",
+        "last_stamp",
+        "last_t",
+        "was_updated",
+    )
 
-    def __init__(self, x0, P0, stamp, tid):
+    def __init__(self, x0, P0, stamp, t_sec, tid):
         self.x = x0.copy()  # [x, y, vx, vy]
         self.P = P0.copy()
         self.age = 1
@@ -145,6 +155,7 @@ class Track:
         self.miss = 0
         self.id = tid
         self.last_stamp = stamp
+        self.last_t = float(t_sec)
         self.was_updated = True
 
 
@@ -190,6 +201,19 @@ class EgoKFTracker(Node):
         self.declare_parameter("R_meas_camera_xy", 0.6)
         self.declare_parameter("R_meas_radar_xy", 0.4)
 
+        # --- Measurement covariance models (preferred over constant stds)
+        self.declare_parameter("use_measurement_covariance_models", True)
+        # Camera model: good bearing, range uncertainty grows with distance
+        self.declare_parameter("cam_sigma_theta_deg", 0.5)
+        self.declare_parameter("cam_range_a", 0.03)  # sigma_r = a*r^2 + b
+        self.declare_parameter("cam_range_b", 0.15)
+        self.declare_parameter("cam_far_sigma_cap", 20.0)
+        self.declare_parameter("camera_trust_max", 12.0)
+
+        # Radar model: moderate bearing, decent range but overall less trusted than camera
+        self.declare_parameter("radar_range_base", 0.8)
+        self.declare_parameter("radar_beamwidth_deg", 3.0)
+
         # --- Ego-motion covariance usage
         self.declare_parameter("use_twist_covariance", True)
         self.declare_parameter("q_yaw_rate_scale", 2.0)
@@ -224,6 +248,18 @@ class EgoKFTracker(Node):
         self.R_meas_fused = (float(self.get_parameter("R_meas_fused_xy").value) ** 2) * np.eye(2)
         self.R_meas_camera = (float(self.get_parameter("R_meas_camera_xy").value) ** 2) * np.eye(2)
         self.R_meas_radar = (float(self.get_parameter("R_meas_radar_xy").value) ** 2) * np.eye(2)
+
+        self.use_measurement_covariance_models = bool(
+            self.get_parameter("use_measurement_covariance_models").value
+        )
+        self.cam_sigma_theta_deg = float(self.get_parameter("cam_sigma_theta_deg").value)
+        self.cam_range_a = float(self.get_parameter("cam_range_a").value)
+        self.cam_range_b = float(self.get_parameter("cam_range_b").value)
+        self.cam_far_sigma_cap = float(self.get_parameter("cam_far_sigma_cap").value)
+        self.camera_trust_max = float(self.get_parameter("camera_trust_max").value)
+
+        self.radar_range_base = float(self.get_parameter("radar_range_base").value)
+        self.radar_beamwidth_deg = float(self.get_parameter("radar_beamwidth_deg").value)
 
         self.use_twist_covariance = bool(
             self.get_parameter("use_twist_covariance").value
@@ -283,16 +319,22 @@ class EgoKFTracker(Node):
         position_world = self.ego_to_world_pos(position_ego, ego_pose=ego_pose)
 
         source = str(msg.detection_type).casefold().strip()
-        Rm = self.get_measurement_covariance(source)
+        Rm_ego = self.get_measurement_covariance(source, position_ego)
+        Rm = self._rotate_covariance(Rm_ego, yaw=float(ego_pose[2]))
         # store immediately in a small buffer for this cycle
         # Simple approach: push onto a list; the timer will consume and clear.
         if not hasattr(self, "_meas_buf"):
             self._meas_buf = []
-        self._meas_buf.append((position_world, Rm, stamp, source))
+        # Measurement time is query_t, since that's the time-aligned ego pose
+        # used for the world transform.
+        self._meas_buf.append((position_world, Rm, stamp, source, float(query_t)))
 
     def on_ego_odom(self, twist_msg: TWCS):
         """Receive ego vehicle twist (body frame)."""
-        t = float(twist_msg.header.stamp.sec) + float(twist_msg.header.stamp.nanosec) * 1e-9
+        t = (
+            float(twist_msg.header.stamp.sec)
+            + float(twist_msg.header.stamp.nanosec) * 1e-9
+        )
         v = float(twist_msg.twist.twist.linear.x)
         yaw_rate = float(twist_msg.twist.twist.angular.z)
 
@@ -327,20 +369,22 @@ class EgoKFTracker(Node):
     def publish_tracks(self):
         """Publish confirmed tracks in ego (base_link) frame."""
         now = self.get_clock().now().to_msg()
+        now_t = float(now.sec) + float(now.nanosec) * 1e-9
         track_array = FusedDetectionArray()
         track_array.header.stamp = now
         for tr in self.tracks:
             if tr.hits < self.spawn_hits:
                 continue  # only publish confirmed
             msg = FusedDetection()
-            msg.header.stamp = tr.last_stamp
+            msg.header.stamp = now
             msg.header.frame_id = "base_link"
-            position_ego = self.world_to_ego_pos(tr.x[0:2])
-            velocity_ego = self.world_to_ego_vel(tr.x[2:4])
+            x_pred, _P_pred = self._predict_track_to_time(tr, now_t)
+            position_ego = self.world_to_ego_pos(x_pred[0:2])
+            velocity_ego = self.world_to_ego_vel(x_pred[2:4])
             msg.position.x = float(position_ego[0])
             msg.position.y = float(position_ego[1])
             msg.position.z = 0.0
-            msg.distance = float(np.hypot(tr.x[0], tr.x[1]))
+            msg.distance = float(np.hypot(position_ego[0], position_ego[1]))
             vx = float(velocity_ego[0])
             vy = float(velocity_ego[1])
             msg.speed = float(np.hypot(vx, vy))
@@ -352,15 +396,67 @@ class EgoKFTracker(Node):
             track_array.detections.append(msg)
         self.pub_tracks.publish(track_array)
 
-    def get_measurement_covariance(self, source: str) -> np.ndarray:
+    @staticmethod
+    def _wrap_angle(a: float) -> float:
+        return (a + math.pi) % (2 * math.pi) - math.pi
+
+    @staticmethod
+    def _polar_to_cart_cov(
+        r: float, theta: float, sigma_r: float, sigma_theta: float
+    ) -> np.ndarray:
+        c, s = float(np.cos(theta)), float(np.sin(theta))
+        J = np.array([[c, -r * s], [s, r * c]], dtype=float)
+        Rpolar = np.diag([float(sigma_r) ** 2, float(sigma_theta) ** 2])
+        return J @ Rpolar @ J.T
+
+    def _camera_cov_xy_ego(self, p_ego: np.ndarray) -> np.ndarray:
+        x, y = float(p_ego[0]), float(p_ego[1])
+        r = float(np.hypot(x, y))
+        theta = float(np.arctan2(y, x))
+        sigma_theta = float(np.deg2rad(self.cam_sigma_theta_deg))
+        sigma_r = float(self.cam_range_a) * (r ** 2) + float(self.cam_range_b)
+        if r > self.camera_trust_max:
+            sigma_r = min(sigma_r, float(self.cam_far_sigma_cap))
+        return self._polar_to_cart_cov(r, theta, sigma_r, sigma_theta)
+
+    def _radar_cov_xy_ego(self, p_ego: np.ndarray) -> np.ndarray:
+        x, y = float(p_ego[0]), float(p_ego[1])
+        r = float(np.hypot(x, y))
+        theta = float(np.arctan2(y, x))
+        sigma_r = float(self.radar_range_base)
+        sigma_theta = float(np.deg2rad(self.radar_beamwidth_deg))
+        return self._polar_to_cart_cov(r, theta, sigma_r, sigma_theta)
+
+    def get_measurement_covariance(self, source: str, position_ego: np.ndarray) -> np.ndarray:
+        """Return 2x2 covariance in ego frame for a measurement at position_ego."""
         src = str(source).casefold().strip()
-        if src == "fused":
-            return self.R_meas_fused
+        if not self.use_measurement_covariance_models:
+            if src == "fused":
+                return self.R_meas_fused
+            if src == "camera":
+                return self.R_meas_camera
+            if src == "radar":
+                return self.R_meas_radar
+            return self.R_meas_default
+
+        Rc = self._camera_cov_xy_ego(position_ego)
+        Rr = self._radar_cov_xy_ego(position_ego)
         if src == "camera":
-            return self.R_meas_camera
+            return Rc
         if src == "radar":
-            return self.R_meas_radar
+            return Rr
+        if src == "fused":
+            Wc = np.linalg.pinv(Rc)
+            Wr = np.linalg.pinv(Rr)
+            return np.linalg.pinv(Wc + Wr)
         return self.R_meas_default
+
+    @staticmethod
+    def _rotate_covariance(R_ego: np.ndarray, yaw: float) -> np.ndarray:
+        c = math.cos(float(yaw))
+        s = math.sin(float(yaw))
+        Rot = np.array([[c, -s], [s, c]], dtype=float)
+        return Rot @ R_ego @ Rot.T
 
     def ego_to_world_pos(self, p_ego: np.ndarray, ego_pose=None) -> np.ndarray:
         """
@@ -417,27 +513,22 @@ class EgoKFTracker(Node):
         Perform all operations in the timer loop.
 
         1. Ego update
-        2. KF predict/update
-        3. track mgmt
-        4. publish.
+        2. Data association + KF predict/update (to measurement timestamps)
+        3. Track management (miss/age/deletion)
+        4. Publish (predict-to-now for output only; does not mutate track state)
         """
         now = self.get_clock().now().nanoseconds * 1e-9
         if self.last_timer_stamp is None:
             self.last_timer_stamp = now
 
-        dt = max(1e-3, now - self.last_timer_stamp)
-
         # 1. Ego pose is integrated from /ego_motion timestamps.
         #    (Detections are transformed using pose-at-stamp from the history.)
 
-        # 2. KF predict for all tracks over dt
-        if self.tracks:
-            self.kf_predict_all(dt)
-            # Reset update flags
-            for tr in self.tracks:
-                tr.was_updated = False
+        # Reset update flags for this cycle
+        for tr in self.tracks:
+            tr.was_updated = False
 
-        # 3. Data association & updates using buffered detections
+        # 2. Data association & updates using buffered detections
         meas = getattr(self, "_meas_buf", [])
         if meas:
             self.associate_and_update(meas)
@@ -446,8 +537,12 @@ class EgoKFTracker(Node):
             if not tr.was_updated:
                 tr.miss += 1
 
-        # 4. Aging / deletion
+        # 3. Aging / deletion
         self.maintain_tracks()
+        # Age tracks by timer cycles
+        for tr in self.tracks:
+            tr.age += 1
+        # 4. Publish
         self.publish_tracks()
         self.last_timer_stamp = now
         # for tr in self.tracks:
@@ -457,42 +552,50 @@ class EgoKFTracker(Node):
 
     # ------------------ KF predict/update ------------------
 
-    def kf_predict_all(self, dt):
-        """KF predict step for all tracks over dt."""
-        # Constant-velocity model with discrete white accel noise
-        a = self.sigma_accel  # Acceleration std
-
+    def _process_noise_scale(self) -> float:
         scale = 1.0
-        if self.enable_ego_drag:
-            yaw_norm = 0.0
-            if self.max_yaw_rate > 1e-6:
-                yaw_norm = min(1.0, abs(float(self.u_delta)) / float(self.max_yaw_rate))
-            scale *= 1.0 + float(self.q_yaw_rate_scale) * yaw_norm
+        if not self.enable_ego_drag:
+            return scale
 
-            if self.use_twist_covariance:
-                cov_norm = 0.0
-                if self.u_var_yaw_rate is not None and self.u_var_yaw_rate >= 0.0:
-                    yaw_rate_std = math.sqrt(float(self.u_var_yaw_rate))
-                    if self.ref_yaw_rate_std > 1e-6:
-                        cov_norm = max(
-                            cov_norm,
-                            min(1.0, yaw_rate_std / float(self.ref_yaw_rate_std)),
-                        )
-                if self.u_var_vx is not None and self.u_var_vx >= 0.0:
-                    speed_std = math.sqrt(float(self.u_var_vx))
-                    if self.ref_speed_std > 1e-6:
-                        cov_norm = max(
-                            cov_norm,
-                            min(1.0, speed_std / float(self.ref_speed_std)),
-                        )
-                scale *= 1.0 + float(self.q_twist_cov_scale) * cov_norm
+        yaw_norm = 0.0
+        if self.max_yaw_rate > 1e-6:
+            yaw_norm = min(1.0, abs(float(self.u_delta)) / float(self.max_yaw_rate))
+        scale *= 1.0 + float(self.q_yaw_rate_scale) * yaw_norm
 
-        # State transition matrix:
+        if self.use_twist_covariance:
+            cov_norm = 0.0
+            if self.u_var_yaw_rate is not None and self.u_var_yaw_rate >= 0.0:
+                yaw_rate_std = math.sqrt(float(self.u_var_yaw_rate))
+                if self.ref_yaw_rate_std > 1e-6:
+                    cov_norm = max(
+                        cov_norm,
+                        min(1.0, yaw_rate_std / float(self.ref_yaw_rate_std)),
+                    )
+            if self.u_var_vx is not None and self.u_var_vx >= 0.0:
+                speed_std = math.sqrt(float(self.u_var_vx))
+                if self.ref_speed_std > 1e-6:
+                    cov_norm = max(
+                        cov_norm,
+                        min(1.0, speed_std / float(self.ref_speed_std)),
+                    )
+            scale *= 1.0 + float(self.q_twist_cov_scale) * cov_norm
+        return float(scale)
+
+    def _predict_track_to_time(self, tr: Track, t_target: float):
+        """Return (x_pred, P_pred) by predicting tr to time t_target without mutating it."""
+        t_target = float(t_target)
+        dt = float(t_target - float(tr.last_t))
+        if dt <= 0.0:
+            return tr.x.copy(), tr.P.copy()
+        dt = min(dt, 5.0)
+
+        a = float(self.sigma_accel)
+        scale = self._process_noise_scale()
+
         F = np.array(
             [[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]], dtype=float
         )
-        q = a * a  # Acceleration variance
-        # Process noise covariance:
+        q = a * a
         Q = (q * scale) * np.array(
             [
                 [dt**4 / 4, 0, dt**3 / 2, 0],
@@ -502,31 +605,37 @@ class EgoKFTracker(Node):
             ],
             dtype=float,
         )
-        # Predict all tracks
-        for tr in self.tracks:
-            tr.x = F @ tr.x
-            tr.P = F @ tr.P @ F.T + Q
-            tr.age += 1
+        x_pred = F @ tr.x
+        P_pred = F @ tr.P @ F.T + Q
+        return x_pred, P_pred
 
-    def kf_update_track(self, tr, position, Rm, H, stamp):
+    def kf_update_track(self, tr, position, Rm, H, stamp, t_meas: float):
         """KF update step for a single track with one measurement."""
+        # Predict-to-measurement time, then update.
+        x_pred, P_pred = self._predict_track_to_time(tr, t_meas)
+
         # KF update
-        y = position - H @ tr.x  # Innovation
-        S = H @ tr.P @ H.T + Rm  # Innovation covariance
-        K = tr.P @ H.T @ np.linalg.inv(S)  # Kalman gain
+        y = position - H @ x_pred  # Innovation
+        S = H @ P_pred @ H.T + Rm  # Innovation covariance
+        try:
+            Sinv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            Sinv = np.linalg.pinv(S)
+        K = P_pred @ H.T @ Sinv  # Kalman gain
         identity = np.eye(4, dtype=float)
 
-        tr.x = tr.x + K @ y  # State update
+        tr.x = x_pred + K @ y  # State update
 
         # Joseph stabilized covariance update
         KH = K @ H
-        tr.P = (identity - KH) @ tr.P @ (identity - KH).T + K @ Rm @ K.T
+        tr.P = (identity - KH) @ P_pred @ (identity - KH).T + K @ Rm @ K.T
 
         # Mark as updated
         tr.was_updated = True
         tr.hits += 1
         tr.miss = 0
         tr.last_stamp = stamp
+        tr.last_t = float(t_meas)
 
     def associate_and_update(self, meas_list):
         """Associate measurements to tracks and perform KF updates."""
@@ -534,22 +643,26 @@ class EgoKFTracker(Node):
         # Map state to measurement
         H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
 
-        # Sort detection array
+        # Sort detections by type priority first, then newest first.
         order = {"fused": 0, "camera": 1, "radar": 2}
-        meas_list.reverse()  # Newest first
-        # Sort based on type priority (fused > camera > radar)
-        meas_list.sort(key=lambda d: order.get(str(d[3]).casefold().strip(), 99))
+
+        def meas_key(item):
+            _pos, _Rm, _stamp, src, t_meas = item
+            return (order.get(str(src).casefold().strip(), 99), -float(t_meas))
+
+        meas_list.sort(key=meas_key)
 
         # Update loop
         used_tracks = set()
-        for position, Rm, stamp, src in meas_list:
+        for position, Rm, stamp, src, t_meas in meas_list:
             best_i = -1
             best_d2 = None
             for i, tr in enumerate(self.tracks):
                 if i in used_tracks:
                     continue
-                y = position - H @ tr.x
-                S = H @ tr.P @ H.T + Rm
+                x_pred, P_pred = self._predict_track_to_time(tr, t_meas)
+                y = position - H @ x_pred
+                S = H @ P_pred @ H.T + Rm
                 try:
                     Sinv = np.linalg.inv(S)
                 except np.linalg.LinAlgError:
@@ -561,15 +674,16 @@ class EgoKFTracker(Node):
 
             if best_i >= 0:
                 tr = self.tracks[best_i]
-                self.kf_update_track(tr, position, Rm, H, stamp)
+                self.kf_update_track(tr, position, Rm, H, stamp, t_meas=t_meas)
                 used_tracks.add(best_i)
                 continue
 
             # Suppress duplicates from lower-priority sources
             duplicate = False
             for i, tr in enumerate(self.tracks):
-                yj = position - H @ tr.x
-                Sj = H @ tr.P @ H.T + Rm
+                x_predj, P_predj = self._predict_track_to_time(tr, t_meas)
+                yj = position - H @ x_predj
+                Sj = H @ P_predj @ H.T + Rm
                 try:
                     Sinvj = np.linalg.inv(Sj)
                 except np.linalg.LinAlgError:
@@ -584,7 +698,7 @@ class EgoKFTracker(Node):
             # No association with existing tracks, spawn a new track with zero vel
             P0 = np.diag([0.5, 0.5, self.init_speed_std**2, self.init_speed_std**2])
             x0 = np.array([position[0], position[1], 0.0, 0.0], dtype=float)
-            self.tracks.append(Track(x0, P0, stamp, self.next_id))
+            self.tracks.append(Track(x0, P0, stamp, float(t_meas), self.next_id))
             self.next_id += 1
 
     def maintain_tracks(self):
@@ -596,13 +710,11 @@ class EgoKFTracker(Node):
             alive = tr.miss <= self.max_miss
             if confirmed and alive:
                 kept.append(tr)
-            elif (
-                not confirmed
-                and alive
-                and tr.age * self.spawn_hit_ratio <= self.spawn_hits
-            ):
-                # brief grace for newborns
-                kept.append(tr)
+            elif not confirmed and alive:
+                # Keep newborn tracks briefly, and beyond that require a reasonable hit ratio.
+                hit_ratio = float(tr.hits) / float(max(1, tr.age))
+                if tr.age <= self.spawn_hits or hit_ratio >= self.spawn_hit_ratio:
+                    kept.append(tr)
         self.tracks = kept
 
 

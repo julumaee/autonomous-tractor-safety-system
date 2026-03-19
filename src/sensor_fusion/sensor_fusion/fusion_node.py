@@ -54,8 +54,14 @@ class FusionNode(Node):
         self.declare_parameter("cam_range_a", 0.05)  # sigma_r = a*r^2 + b
         self.declare_parameter("cam_range_b", 0.20)
         self.declare_parameter("cam_far_sigma_cap", 30.0)  # cap (m) for far range
-        self.declare_parameter("radar_range_base", 0.3)  # radar rng error (m)
+        self.declare_parameter("radar_range_base", 0.5)  # radar rng error (m)
         self.declare_parameter("radar_beamwidth_deg", 2.0)  # deg (≈ azimuth std)
+
+        # --- Single-sensor publish gating (do NOT affect fusion path) ---
+        # Camera: require minimum classification confidence when publishing camera-only detections.
+        self.declare_parameter("camera_min_score_single", 0.8)  # 0..1
+        # Radar: require minimum radar confidence when publishing radar-only detections.
+        self.declare_parameter("radar_min_confidence_percent_single", 80.0)  # 0..100
 
         # Retrieve parameter values
         self.time_threshold = self.get_parameter("time_threshold").value
@@ -81,6 +87,13 @@ class FusionNode(Node):
         self.cam_far_sigma_cap = self.get_parameter("cam_far_sigma_cap").value
         self.radar_range_base = self.get_parameter("radar_range_base").value
         self.radar_beamwidth_deg = self.get_parameter("radar_beamwidth_deg").value
+
+        self.camera_min_score_single = float(
+            self.get_parameter("camera_min_score_single").value
+        )
+        self.radar_min_confidence_percent_single = float(
+            self.get_parameter("radar_min_confidence_percent_single").value
+        )
 
         # Initialize detection deques
         self.camera_detections = deque(maxlen=200)  # Limit to 200 recent detections
@@ -140,9 +153,13 @@ class FusionNode(Node):
             elif param.name == "cam_far_sigma_cap":
                 self.cam_far_sigma_cap = param.value
             elif param.name == "radar_range_base":
-                self.radar_range = param.value
+                self.radar_range_base = param.value
             elif param.name == "radar_beamwidth_deg":
                 self.radar_beamwidth_deg = param.value
+            elif param.name == "camera_min_score_single":
+                self.camera_min_score_single = float(param.value)
+            elif param.name == "radar_min_confidence_percent_single":
+                self.radar_min_confidence_percent_single = float(param.value)
         return SetParametersResult(successful=True)
 
     def listen_to_camera(self, msg):
@@ -175,6 +192,10 @@ class FusionNode(Node):
             else:
                 self.create_radar_detection(radar_detection)
                 self.radar_detections.remove(radar_detection)
+        else:
+            # Untrusted for single-sensor publish: keep in buffer so it can still be
+            # fused later if a partner arrives within max_buffer_age.
+            return
 
     def process_camera_detection_without_fusion(self, camera_detection):
         """Process camera detections independently if no radar detections exist."""
@@ -193,18 +214,9 @@ class FusionNode(Node):
                 self.create_camera_detection(camera_detection)
                 self.camera_detections.remove(camera_detection)
         else:
-            # Log why detection was rejected
-            distance = np.linalg.norm(
-                [
-                    camera_detection.position.x,
-                    camera_detection.position.y,
-                    camera_detection.position.z,
-                ]
-            )
-            self.get_logger().debug(
-                f"Camera detection rejected: distance {distance:.2f}m exceeds "
-                f"camera_trust_max {self.camera_trust_max}m"
-            )
+            # Untrusted for single-sensor publish: keep in buffer so it can still be
+            # fused later if a partner arrives within max_buffer_age.
+            return
 
     def transform_camera_to_base(self, camera_msg) -> CameraDetection:
         """Transform camera coordinates to base coordinates."""
@@ -257,11 +269,21 @@ class FusionNode(Node):
                 timeout=Duration(seconds=0.05),
             )
             ps_fused = do_transform_point(ps, tf)
-        except Exception:
+        except Exception as e:
+            self.get_logger().warn(
+                f"TF transform failed: {self.radar_frame} -> {self.fusion_frame}: {str(e)}"
+            )
             return None
         radar_msg.position = ps_fused.point
         radar_msg.header.frame_id = self.fusion_frame
         return radar_msg
+
+    @staticmethod
+    def _stamp_to_float(stamp) -> float:
+        return float(stamp.sec) + float(stamp.nanosec) * 1e-9
+
+    def _newer_stamp(self, a, b):
+        return a if self._stamp_to_float(a) >= self._stamp_to_float(b) else b
 
     def verify_detection(self, detection, detection_type):
         """Verify detection validity."""
@@ -269,14 +291,46 @@ class FusionNode(Node):
             distance = np.linalg.norm(
                 [detection.position.x, detection.position.y, detection.position.z]
             )
-            if distance < self.camera_trust_max:
-                return True
-            else:
+            if distance >= self.camera_trust_max:
                 self.get_logger().debug(
                     f"Camera detection rejected: distance {distance:.2f}m exceeds "
                     f"camera_trust_max {self.camera_trust_max}m"
                 )
+                return False
+
+            # Single-sensor camera publish gating by NN confidence.
+            # This does not affect fusion path (fusion is handled separately).
+            best_score = 0.0
+            if hasattr(detection, "results") and detection.results:
+                try:
+                    best_score = float(max(h.score for h in detection.results))
+                except Exception:
+                    best_score = 0.0
+
+            if best_score < float(self.camera_min_score_single):
+                self.get_logger().debug(
+                    f"Camera detection rejected (single-sensor): score {best_score:.3f} < "
+                    f"camera_min_score_single {self.camera_min_score_single:.3f}"
+                )
+                return False
+
+            return True
         elif detection_type == "radar":
+            # Single-sensor radar publish gating by radar confidence.
+            # Fusion path is not gated by this.
+            conf = 100.0
+            if hasattr(detection, "confidence_percent"):
+                try:
+                    conf = float(detection.confidence_percent)
+                except Exception:
+                    conf = 0.0
+            if conf < float(self.radar_min_confidence_percent_single):
+                self.get_logger().debug(
+                    f"Radar detection rejected (single-sensor): confidence {conf:.1f}% < "
+                    f"radar_min_confidence_percent_single "
+                    f"{self.radar_min_confidence_percent_single:.1f}%"
+                )
+                return False
             return True
         return False
 
@@ -568,6 +622,9 @@ class FusionNode(Node):
         """Create a FusedDetection message from camera and radar detections."""
         fused_detection = FusedDetection()
         fused_detection.header = radar_detection.header
+        fused_detection.header.stamp = self._newer_stamp(
+            camera_detection.header.stamp, radar_detection.header.stamp
+        )
         fused_detection.results = camera_detection.results
         # Fuse position XY using weighted least squares
         xy = self.fuse_xy_wls(camera_detection, radar_detection)

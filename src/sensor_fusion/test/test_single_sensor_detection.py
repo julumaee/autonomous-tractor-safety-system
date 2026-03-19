@@ -90,6 +90,7 @@ class TestSingleSensorDetection(unittest.TestCase):
         msg.position = Point(x=x, y=y, z=z)
         msg.distance = (x**2 + y**2) ** 0.5
         msg.speed = speed
+        msg.confidence_percent = 100.0
         return msg
 
     def test_single_detection_handling(self):
