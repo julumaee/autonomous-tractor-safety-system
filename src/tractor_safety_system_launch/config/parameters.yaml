@@ -1,0 +1,100 @@
+camera_node:
+  ros__parameters:
+    input_topic: /oak/nn/spatial_detections
+    output_topic: /camera_detections
+    frame_id: camera_link
+    queue_size: 10
+    enable_logging: false
+
+radar_node:
+  ros__parameters:
+    can_channel: can0
+    frame_timeout: 0.5
+    poll_period: 0.01
+    min_height_m: 0.5
+    use_abs_height: true
+    # Set to -1.0 to flip lateral axis to ROS REP-103 (+y left)
+    lateral_sign: -1.0
+
+fusion_node:
+  ros__parameters:
+    # --- Threshold values ---
+    time_threshold: 0.1
+    camera_trust_max: 12.0
+    chi2_threshold: 5.99
+    max_buffer_age: 1.0
+    near_immediate_range: 3.0
+    selection_radius: 0.5
+
+    # --- Frames ---
+    fusion_frame: base_link
+    radar_frame: radar_link
+    camera_frame: camera_link
+
+    # --- Camera covariance model ---
+    cam_sigma_theta_deg: 0.5
+    cam_range_a: 0.05
+    cam_range_b: 0.20
+    cam_far_sigma_cap: 30.0
+
+    # --- Radar covariance model ---
+    radar_range_base: 0.5
+    radar_beamwidth_deg: 2.0
+
+    # --- Single-sensor publish gating only (does NOT affect fusion path) ---
+    camera_min_score_single: 0.6
+    radar_min_confidence_percent_single: 80.0
+
+kf_tracker:
+  ros__parameters:
+    # --- Control->vehicle parameters
+    wheelbase: 2.5
+    steer_unit_per_rad: 57.29577951308232  # 180/pi
+    speed_unit_per_mps: 1.0
+    control_latency: 0.10
+    max_yaw_rate: 1.0
+
+    # --- KF modelling
+    sigma_accel: 3.0
+    R_meas_xy: 0.3
+    gate_chi2: 10.597
+
+    # --- Track mgmt
+    spawn_hits: 3
+    spawn_hit_ratio: 0.75
+    max_miss: 10
+    init_speed_std: 3.0
+    update_rate: 20.0
+    enable_ego_drag: true
+
+    # --- Time alignment
+    measurement_latency: 0.0
+    pose_history_seconds: 10.0
+
+    # --- Measurement noise (per-axis std in meters)
+    R_meas_fused_xy: 0.3
+    R_meas_camera_xy: 0.6
+    R_meas_radar_xy: 0.4
+
+    # If true, use range/bearing-based measurement covariance models
+    # (instead of constant per-source R_meas_*_xy above).
+    use_measurement_covariance_models: true
+
+    # --- Ego-motion covariance usage
+    use_twist_covariance: true
+    q_yaw_rate_scale: 2.0
+    q_twist_cov_scale: 2.0
+    ref_yaw_rate_std: 0.3
+    ref_speed_std: 0.5
+
+safety_monitor:
+  ros__parameters:
+    safety_distance_1: 40.0
+    safety_distance_2: 10.0
+    stop_distance: 3.0
+
+    speed_override_1: 1.5
+    speed_override_2: 1.0
+
+    detection_active_reset_time: 5.0
+    vehicle_stopped_reset_time: 5.0

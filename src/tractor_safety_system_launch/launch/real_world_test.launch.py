@@ -40,16 +40,31 @@ Usage:
         start_camera:=false
 """
 
+import os
+
+from ament_index_python import get_package_share_path
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
+    # A shared parameters file for nodes that use it.
+    # Default to this package's config, but allow override.
+    launch_pkg_share = get_package_share_path("tractor_safety_system_launch")
+    default_params = os.path.join(launch_pkg_share, "config", "parameters.yaml")
+
+    params_arg = DeclareLaunchArgument(
+        "params",
+        default_value=default_params,
+        description="Path to parameters YAML file used by perception stack nodes",
+    )
+    params = LaunchConfiguration("params")
+
     start_ego_motion = LaunchConfiguration("start_ego_motion")
     test_name = LaunchConfiguration("test_name")
     can_channel = LaunchConfiguration("can_channel")
@@ -58,7 +73,12 @@ def generate_launch_description():
     start_tracker = LaunchConfiguration("start_tracker")
     start_radar = LaunchConfiguration("start_radar")
     start_camera = LaunchConfiguration("start_camera")
+    start_camera_driver = LaunchConfiguration("start_camera_driver")
     publish_tf = LaunchConfiguration("publish_tf")
+
+    use_measurement_covariance_models = LaunchConfiguration(
+        "use_measurement_covariance_models"
+    )
     test_name_arg = DeclareLaunchArgument(
         "test_name",
         default_value="test_1",
@@ -76,20 +96,22 @@ def generate_launch_description():
             ]
         ),
         launch_arguments={
-            "start_camera_driver": start_camera,
+            "params": params,
+            "start_camera_driver": start_camera_driver,
             "start_tracker": start_tracker,
             "start_radar": start_radar,
             "start_camera": start_camera,
             "publish_tf": publish_tf,
             "can_channel": can_channel,
+            "use_measurement_covariance_models": use_measurement_covariance_models,
             # Pass through any TF overrides from command line
             # Users can specify these when launching this file
             "camera_tf_x": LaunchConfiguration("camera_tf_x", default="0.0"),
             "camera_tf_y": LaunchConfiguration("camera_tf_y", default="0.0"),
             "camera_tf_z": LaunchConfiguration("camera_tf_z", default="0.0"),
-            "camera_tf_roll": LaunchConfiguration("camera_tf_roll", default="-1.5708"),
+            "camera_tf_roll": LaunchConfiguration("camera_tf_roll", default="0.0"),
             "camera_tf_pitch": LaunchConfiguration("camera_tf_pitch", default="0.0"),
-            "camera_tf_yaw": LaunchConfiguration("camera_tf_yaw", default="-1.5708"),
+            "camera_tf_yaw": LaunchConfiguration("camera_tf_yaw", default="0.0"),
             "radar_tf_x": LaunchConfiguration("radar_tf_x", default="0.0"),
             "radar_tf_y": LaunchConfiguration("radar_tf_y", default="0.0"),
             "radar_tf_z": LaunchConfiguration("radar_tf_z", default="0.0"),
@@ -108,9 +130,8 @@ def generate_launch_description():
         parameters=[{"test_name": test_name}],
     )
 
-    # GPS-based ego motion publisher
-    # Publishes on GPS receipt (event-driven)
-    # Configure GPS topics to match your GPS driver
+    # GPS-based ego motion publisher (FIELD TEST: straight line)
+    # Uses ublox NavPVT for speed; yaw-rate forced to 0
     ego_motion_node = Node(
         package="simulations",
         executable="gps_ego_motion",
@@ -119,14 +140,19 @@ def generate_launch_description():
         condition=IfCondition(start_ego_motion),
         parameters=[
             {
-                "gps_fix_topic": LaunchConfiguration("gps_fix_topic", default="/gps/fix"),
-                "gps_velocity_topic": LaunchConfiguration("gps_vel_topic", default="/gps/vel"),
-                "gps_heading_topic": LaunchConfiguration(
-                    "gps_heading_topic", default="/gps/heading"
-                ),
-                "use_velocity_topic": LaunchConfiguration("use_gps_vel", default="false"),
-                "use_heading_topic": LaunchConfiguration("use_gps_heading", default="false"),
-                "gps_timeout": 1.0,  # Warn if no GPS data for 1 second
+                # Input from ublox_gps
+                "navpvt_topic": LaunchConfiguration("navpvt_topic", default="/navpvt"),
+
+                # Output used by your perception stack
+                "publish_topic": LaunchConfiguration("ego_motion_topic", default="/ego_motion"),
+
+                # Publish rate (steady, not event-driven)
+                "publish_rate_hz": LaunchConfiguration("ego_motion_rate_hz", default="10.0"),
+
+                # Simple gating / safety behavior
+                "min_fix_type": LaunchConfiguration("ego_motion_min_fix_type", default="2"),
+                "min_sv": LaunchConfiguration("ego_motion_min_sv", default="4"),
+                "timeout_s": LaunchConfiguration("ego_motion_timeout_s", default="1.0"),
             }
         ],
     )
@@ -179,6 +205,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             test_name_arg,
+            params_arg,
             DeclareLaunchArgument(
                 "can_channel",
                 default_value="can0",
@@ -200,9 +227,25 @@ def generate_launch_description():
                 description="Start the camera interface node",
             ),
             DeclareLaunchArgument(
+                "start_camera_driver",
+                default_value="true",
+                description=(
+                    "Start the OAK-D S2 camera driver (depthai-ros-driver). "
+                    "If false, assumes camera driver is already running."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "publish_tf",
                 default_value="true",
                 description="Publish static TF transforms for sensors",
+            ),
+            DeclareLaunchArgument(
+                "use_measurement_covariance_models",
+                default_value="true",
+                description=(
+                    "If true, kf_tracker uses range/bearing-based measurement covariance models. "
+                    "If false, uses constant per-source covariance (R_meas_*_xy)."
+                ),
             ),
             DeclareLaunchArgument(
                 "start_ego_motion",
@@ -229,10 +272,16 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "ublox_config_file",
-                default_value="",
+                default_value=PathJoinSubstitution(
+                    [
+                        FindPackageShare("tractor_safety_system_launch"),
+                        "config",
+                        "zed_f9p_rover.yaml",
+                    ]
+                ),
                 description=(
-                    "Optional: YAML config file for ublox_gps_node. If empty, "
-                    "gps_rtk_ublox_ntrip.launch.py uses its default config."
+                    "YAML config file for ublox_gps_node. Defaults to the workspace-owned "
+                    "tractor_safety_system_launch/config/zed_f9p_rover.yaml."
                 ),
             ),
             DeclareLaunchArgument(

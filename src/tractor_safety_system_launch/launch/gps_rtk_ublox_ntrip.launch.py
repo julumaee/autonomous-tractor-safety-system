@@ -130,7 +130,12 @@ def generate_launch_description():
                 "device": gps_device,
                 # ArduSimple tutorial wiring: /rtcm -> ublox `rtcm_input`
                 "rtcm_input": rtcm_topic,
+                # Note: uart1.baudrate override is only needed if using UART instead of USB.
+                # When using USB (/dev/ttyACM0), the baudrate is not used.
+                # Keeping as-is for backwards compatibility with UART setups.
                 "uart1": {"baudrate": gps_baudrate},
+                "rate": 10.0,      # Hz (measurement rate)
+                "nav_rate": 1,     # navigation rate in measurement cycles
             },
         ],
         remappings=[

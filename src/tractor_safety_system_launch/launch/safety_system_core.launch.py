@@ -68,6 +68,10 @@ def generate_launch_description():
     publish_tf = LaunchConfiguration("publish_tf")
     can_channel = LaunchConfiguration("can_channel")
 
+    use_measurement_covariance_models = LaunchConfiguration(
+        "use_measurement_covariance_models"
+    )
+
     # TF values (base_link -> camera_link)
     cam_x = LaunchConfiguration("camera_tf_x")
     cam_y = LaunchConfiguration("camera_tf_y")
@@ -85,9 +89,9 @@ def generate_launch_description():
     rad_roll = LaunchConfiguration("radar_tf_roll")
 
     # A shared parameters file for nodes that use it
-    # Default to simulations package config, but allow override
-    sim_pkg_share = get_package_share_path("simulations")
-    default_params = os.path.join(sim_pkg_share, "config", "parameters.yaml")
+    # Default to this package's config, but allow override
+    launch_pkg_share = get_package_share_path("tractor_safety_system_launch")
+    default_params = os.path.join(launch_pkg_share, "config", "parameters.yaml")
 
     # Allow overriding from CLI: params:=/abs/path/to/custom.yaml
     params_arg = DeclareLaunchArgument(
@@ -112,6 +116,7 @@ def generate_launch_description():
             "start_camera": start_camera,
             "start_camera_driver": LaunchConfiguration("start_camera_driver"),
             "publish_tf": publish_tf,
+            "use_measurement_covariance_models": use_measurement_covariance_models,
             "camera_tf_x": cam_x,
             "camera_tf_y": cam_y,
             "camera_tf_z": cam_z,
@@ -190,6 +195,14 @@ def generate_launch_description():
                 default_value="false",
                 description="Start the OAK-D S2 camera driver (depthai-ros-driver). "
                 "If false, assumes camera driver is already running.",
+            ),
+            DeclareLaunchArgument(
+                "use_measurement_covariance_models",
+                default_value="true",
+                description=(
+                    "If true, kf_tracker uses range/bearing-based measurement covariance models. "
+                    "If false, uses constant per-source covariance (R_meas_*_xy)."
+                ),
             ),
             # Camera TF (base_link -> camera_link)
             DeclareLaunchArgument(

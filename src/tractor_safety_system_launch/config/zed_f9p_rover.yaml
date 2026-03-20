@@ -17,17 +17,33 @@ ublox_gps_node:
     # NTRIP client should publish to this topic.
     rtcm_input: /rtcm
 
-    # UART1 is typically where RTCM is injected for rover setups.
-    uart1:
-      baudrate: 115200
-      in: 32   # RTCM 3
-      out: 0
+    # USB port protocol configuration
+    # NOTE: Leaving USB protocol masks unset uses the receiver defaults
+    # (UBX + NMEA on USB). This is typically safest for /dev/ttyACM0.
+
+    # UART1 configuration (not used when connecting via USB, kept for reference)
+    # If you switch to UART connection, update these values:
+    # uart1:
+    #   baudrate: 115200
+    #   in: 35   # UBX | NMEA | RTCM 3
+    #   out: 1   # UBX
 
     # Rover mode (survey-in disabled). If configuring a base, this differs.
     tmode3: 0
 
+    # DGNSS mode: RTK (Float or Fixed). This enables the receiver to process RTCM corrections.
+    # RTK_FIXED = 2 (best accuracy, requires fixed solution)
+    # RTK_FLOAT = 1 (slightly lower accuracy, works with float solution)
+    dgnss_mode: 2
+
+    # Information message settings
     inf:
-      all: true
+      all: true           # Publish all INF messages to console
+      error: true         # Log errors
+      warning: true       # Log warnings
+      notice: true        # Log notices
+      debug: false        # Log debug messages (set to true if needed)
+      test: false         # Log test messages
 
     publish:
       all: true

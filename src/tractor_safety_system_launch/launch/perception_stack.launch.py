@@ -16,12 +16,126 @@ import os
 
 from ament_index_python import get_package_share_path
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def _parse_calibration_tf_file(path: str) -> dict:
+    """
+    Parse a calibration_tf.txt file.
+
+    Expected lines (comments with # ignored):
+        radar_tf:  x y z roll pitch yaw
+        camera_tf: x y z roll pitch yaw
+
+    Returns a dict with keys 'radar_tf' and/or 'camera_tf', each a list of
+    6 floats [x, y, z, roll, pitch, yaw].
+    """
+    result: dict = {}
+    if not path:
+        return result
+    abs_path = os.path.abspath(path)
+    if not os.path.exists(abs_path):
+        print(f"[perception_stack] WARNING: tf_file not found: {abs_path}")
+        return result
+    with open(abs_path, encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            for key in ("radar_tf", "camera_tf"):
+                if line.startswith(key + ":"):
+                    parts = line.split(":", 1)[1].strip().split()
+                    if len(parts) >= 6:
+                        result[key] = [float(p) for p in parts[:6]]
+    return result
+
+
+def _make_tf_nodes(context, *args, **kwargs):
+    """
+    Resolve TF values from file plus individual overrides.
+
+    Priority (highest wins):
+        1. Individual tf arg set to a non-empty value on the command line.
+        2. Value from tf_file (if provided and parseable).
+        3. Default of 0.0.
+    """
+    tf_file = LaunchConfiguration("tf_file").perform(context).strip()
+    parsed = _parse_calibration_tf_file(tf_file)
+
+    if tf_file and parsed:
+        print(f"[perception_stack] Loaded TF from file: {tf_file}")
+        for k, v in parsed.items():
+            print(f"  {k}: {' '.join(str(x) for x in v)}")
+    elif tf_file and not parsed:
+        print(f"[perception_stack] WARNING: tf_file set but could not be parsed: {tf_file}")
+
+    radar_file = parsed.get("radar_tf")  # [x, y, z, roll, pitch, yaw] or None
+    camera_file = parsed.get("camera_tf")
+
+    def _resolve(arg_name, file_values, idx):
+        """Return string value: arg override > file value > '0.0'."""
+        val = LaunchConfiguration(arg_name).perform(context).strip()
+        if val:  # explicitly set on command line
+            return val
+        if file_values is not None:
+            return str(file_values[idx])
+        return "0.0"
+
+    rad_x = _resolve("radar_tf_x", radar_file, 0)
+    rad_y = _resolve("radar_tf_y", radar_file, 1)
+    rad_z = _resolve("radar_tf_z", radar_file, 2)
+    rad_roll = _resolve("radar_tf_roll", radar_file, 3)
+    rad_pitch = _resolve("radar_tf_pitch", radar_file,  4)
+    rad_yaw = _resolve("radar_tf_yaw", radar_file, 5)
+
+    cam_x = _resolve("camera_tf_x", camera_file, 0)
+    cam_y = _resolve("camera_tf_y", camera_file, 1)
+    cam_z = _resolve("camera_tf_z", camera_file, 2)
+    cam_roll = _resolve("camera_tf_roll", camera_file, 3)
+    cam_pitch = _resolve("camera_tf_pitch", camera_file, 4)
+    cam_yaw = _resolve("camera_tf_yaw", camera_file, 5)
+
+    do_publish = LaunchConfiguration("publish_tf").perform(context).strip().lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+    if not do_publish:
+        return []
+
+    tf_cam = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_camera",
+        arguments=[
+            "--x", cam_x, "--y", cam_y, "--z", cam_z,
+            "--yaw", cam_yaw, "--pitch", cam_pitch, "--roll", cam_roll,
+            "--frame-id", "base_link",
+            "--child-frame-id", "camera_link",
+        ],
+        output="screen",
+    )
+
+    tf_radar = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_radar",
+        arguments=[
+            "--x", rad_x, "--y", rad_y, "--z", rad_z,
+            "--yaw", rad_yaw, "--pitch", rad_pitch, "--roll", rad_roll,
+            "--frame-id", "base_link",
+            "--child-frame-id", "radar_link",
+        ],
+        output="screen",
+    )
+
+    return [tf_cam, tf_radar]
 
 
 def generate_launch_description():
@@ -57,29 +171,17 @@ def generate_launch_description():
     start_radar = LaunchConfiguration("start_radar")
     start_camera = LaunchConfiguration("start_camera")
     start_camera_driver = LaunchConfiguration("start_camera_driver")
-    publish_tf = LaunchConfiguration("publish_tf")
+
+    use_measurement_covariance_models = LaunchConfiguration(
+        "use_measurement_covariance_models"
+    )
 
     can_channel = LaunchConfiguration("can_channel")
 
-    # TF values (base_link -> camera_link)
-    cam_x = LaunchConfiguration("camera_tf_x")
-    cam_y = LaunchConfiguration("camera_tf_y")
-    cam_z = LaunchConfiguration("camera_tf_z")
-    cam_yaw = LaunchConfiguration("camera_tf_yaw")
-    cam_pitch = LaunchConfiguration("camera_tf_pitch")
-    cam_roll = LaunchConfiguration("camera_tf_roll")
-
-    # TF values (base_link -> radar_link)
-    rad_x = LaunchConfiguration("radar_tf_x")
-    rad_y = LaunchConfiguration("radar_tf_y")
-    rad_z = LaunchConfiguration("radar_tf_z")
-    rad_yaw = LaunchConfiguration("radar_tf_yaw")
-    rad_pitch = LaunchConfiguration("radar_tf_pitch")
-    rad_roll = LaunchConfiguration("radar_tf_roll")
-
     # Parameters file
-    sim_pkg_share = get_package_share_path("simulations")
-    default_params = os.path.join(sim_pkg_share, "config", "parameters.yaml")
+    # Default to this package's config (real-world/perception defaults).
+    launch_pkg_share = get_package_share_path("tractor_safety_system_launch")
+    default_params = os.path.join(launch_pkg_share, "config", "parameters.yaml")
 
     params_arg = DeclareLaunchArgument(
         "params",
@@ -138,45 +240,11 @@ def generate_launch_description():
         executable="kf_tracker",
         name="kf_tracker",
         output="screen",
-        parameters=[params],
+        parameters=[
+            params,
+            {"use_measurement_covariance_models": use_measurement_covariance_models},
+        ],
         condition=IfCondition(start_tracker),
-    )
-
-    # --- TF Transforms ---
-    tf_cam = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="static_tf_camera",
-        arguments=[
-            cam_x,
-            cam_y,
-            cam_z,
-            cam_roll,
-            cam_pitch,
-            cam_yaw,
-            "base_link",
-            "camera_link",
-        ],
-        condition=IfCondition(publish_tf),
-        output="screen",
-    )
-
-    tf_radar = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="static_tf_radar",
-        arguments=[
-            rad_x,
-            rad_y,
-            rad_z,
-            rad_roll,
-            rad_pitch,
-            rad_yaw,
-            "base_link",
-            "radar_link",
-        ],
-        condition=IfCondition(publish_tf),
-        output="screen",
     )
 
     return LaunchDescription(
@@ -210,74 +278,95 @@ def generate_launch_description():
                 "If false, assumes camera driver is already running.",
             ),
             DeclareLaunchArgument(
+                "use_measurement_covariance_models",
+                default_value="true",
+                description=(
+                    "If true, kf_tracker uses range/bearing-based measurement covariance models. "
+                    "If false, uses constant per-source covariance (R_meas_*_xy)."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "publish_tf",
                 default_value="true",
                 description="Publish static TF transforms for sensors",
             ),
-            # Camera TF (base_link -> camera_link)
-            # Default values convert camera axes to match real axis orientation:
-            # roll = -1.5708 rad  (-90 deg), yaw = -1.5708 rad (-90 deg), pitch = 0
-            # Position defaults remain at origin and can be overridden at launch.
+            # TF file (base_link -> sensor_link for all sensors).
+            # When set, values are read from the file and used as defaults.
+            # Individual tf_* args below will override the file value when provided.
+            DeclareLaunchArgument(
+                "tf_file",
+                default_value="",
+                description=(
+                    "Path to calibration TF file (calibration_tf.txt format). "
+                    "Values are used as defaults; individual tf_* args override them."
+                ),
+            ),
+            # Camera TF (base_link -> camera_link).
+            # NOTE: camera_node converts incoming detections from optical axes to camera_link
+            # online, so this TF should represent only the physical mounting of camera_link
+            # on the vehicle (no fixed optical correction).
+            # Leave empty to use tf_file value (or 0.0 if no file given).
             DeclareLaunchArgument(
                 "camera_tf_x",
-                default_value="0.0",
-                description="Camera X offset from base_link (meters)",
+                default_value="",
+                description="Camera X offset from base_link (meters). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "camera_tf_y",
-                default_value="0.0",
-                description="Camera Y offset from base_link (meters)",
+                default_value="",
+                description="Camera Y offset from base_link (meters). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "camera_tf_z",
-                default_value="0.0",
-                description="Camera Z offset from base_link (meters)",
+                default_value="",
+                description="Camera Z offset from base_link (meters). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "camera_tf_roll",
-                default_value="-1.5708",
-                description="Camera roll angle (radians)",
+                default_value="",
+                description="Camera roll angle (radians). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "camera_tf_pitch",
-                default_value="0.0",
-                description="Camera pitch angle (radians)",
+                default_value="",
+                description="Camera pitch angle (radians). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "camera_tf_yaw",
-                default_value="-1.5708",
-                description="Camera yaw angle (radians)",
+                default_value="",
+                description="Camera yaw angle (radians). Empty = use tf_file.",
             ),
-            # Radar TF (base_link -> radar_link)
+            # Radar TF (base_link -> radar_link).
+            # Leave empty to use tf_file value (or 0.0 if no file given).
             DeclareLaunchArgument(
                 "radar_tf_x",
-                default_value="0.0",
-                description="Radar X offset from base_link (meters)",
+                default_value="",
+                description="Radar X offset from base_link (meters). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "radar_tf_y",
-                default_value="0.0",
-                description="Radar Y offset from base_link (meters)",
+                default_value="",
+                description="Radar Y offset from base_link (meters). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "radar_tf_z",
-                default_value="0.0",
-                description="Radar Z offset from base_link (meters)",
+                default_value="",
+                description="Radar Z offset from base_link (meters). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "radar_tf_roll",
-                default_value="0.0",
-                description="Radar roll angle (radians)",
+                default_value="",
+                description="Radar roll angle (radians). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "radar_tf_pitch",
-                default_value="0.0",
-                description="Radar pitch angle (radians)",
+                default_value="",
+                description="Radar pitch angle (radians). Empty = use tf_file.",
             ),
             DeclareLaunchArgument(
                 "radar_tf_yaw",
-                default_value="0.0",
-                description="Radar yaw angle (radians)",
+                default_value="",
+                description="Radar yaw angle (radians). Empty = use tf_file.",
             ),
             # Camera driver (optional - launches depthai-ros-driver only)
             # camera_node is launched separately below as part of the perception stack
@@ -287,7 +376,7 @@ def generate_launch_description():
             camera_node,
             fusion_node,
             tracker_node,
-            tf_cam,
-            tf_radar,
+            # TF transforms resolved from tf_file + optional per-arg overrides
+            OpaqueFunction(function=_make_tf_nodes),
         ]
     )

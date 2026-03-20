@@ -1,0 +1,43 @@
+fusion_node:
+  ros__parameters:
+    # Use simulation time
+    use_sim_time: True
+    # Time threshold for detection matching
+    time_threshold: 0.1  # seconds
+    # Maximum distance to trust camera detections without fusion
+    camera_trust_max: 12.0
+
+safety_monitor:
+  ros__parameters:
+    # Use simulation time
+    use_sim_time: True
+
+    # Safety distances for target proximity
+    safety_distance_1: 40.0  # meters
+    safety_distance_2: 10.0  # meters
+    safety_distance_3: 3.0   # meters
+
+    # Speed overrides for safety distances
+    speed_override_1: 1.5    # override speed for safety_distance_1 (m/s)
+    speed_override_2: 1.0    # override speed for safety_distance_2 (m/s)
+    speed_override_3: 0.0    # override speed for safety_distance_3 (stop)
+
+    # Time reset values
+    detection_active_reset_time: 5.0 # If nothing is detected for this time period, speed state is transitioned one step
+    vehicle_stopped_reset_time: 5.0 # If no detections are inside stop distance for this time period, speed control is given to AgOpen
+
+camera_node:
+  ros__parameters:
+    use_sim_time: True
+
+kf_tracker:
+  ros__parameters:
+    enable_ego_drag: True
+    use_sim_time: True
+    use_measurement_covariance_models: True
+
+radar_node:
+  ros__parameters:
+    use_sim_time: True
+    # Can bus channel
+    can_channel: vcan0
