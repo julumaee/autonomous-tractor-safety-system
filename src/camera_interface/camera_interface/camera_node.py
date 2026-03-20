@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import rclpy
+from geometry_msgs.msg import Point
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from std_msgs.msg import Header
@@ -47,6 +48,10 @@ class CameraNode(Node):
         # Can be overridden via parameters.yaml or launch arguments
         self.declare_parameter("input_topic", "/oak/nn/spatial_detections")
         self.declare_parameter("output_topic", "/camera_detections")
+        # Output frame for this project's fusion pipeline.
+        # The incoming detections from depthai are in the camera optical frame
+        # (x right, y down, z forward). We convert the coordinates to camera_link
+        # (x forward, y left, z up) and publish in this frame.
         self.declare_parameter("frame_id", "camera_link")
         self.declare_parameter("queue_size", 10)
         self.declare_parameter("enable_logging", False)
@@ -168,18 +173,28 @@ class CameraNode(Node):
 
             # Set the position
             if position_candidate is not None:
-                camera_detection_msg.position = position_candidate
+                # Convert from camera optical frame -> camera_link.
+                # Optical (x right, y down, z forward) -> camera_link (x forward, y left, z up)
+                #   x_link = z_opt
+                #   y_link = -x_opt
+                #   z_link = -y_opt
+                camera_detection_msg.position = Point(
+                    x=float(position_candidate.z),
+                    y=float(-position_candidate.x),
+                    z=float(-position_candidate.y),
+                )
                 if self.enable_logging:
                     self.get_logger().info(
                         f"Position from {position_source}: "
-                        f"({position_candidate.x:.2f},"
+                        f"opt=({position_candidate.x:.2f},"
                         f" {position_candidate.y:.2f},"
-                        f" {position_candidate.z:.2f})"
+                        f" {position_candidate.z:.2f}) -> "
+                        f"link=({camera_detection_msg.position.x:.2f},"
+                        f" {camera_detection_msg.position.y:.2f},"
+                        f" {camera_detection_msg.position.z:.2f})"
                     )
             else:
                 # Default to origin if no valid position available
-                from geometry_msgs.msg import Point
-
                 camera_detection_msg.position = Point()
                 # Log warning with details about what we found
                 bbox_pos = (

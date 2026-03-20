@@ -145,18 +145,24 @@ class TestCameraNode(unittest.TestCase):
             msg="Detection 1 results should retain class ID",
         )
         # Position comes from results[0].pose.pose.position in Detection3D
-
+        in_pos_1 = camera_msg.detections[0].results[0].pose.pose.position
         self.assertAlmostEqual(
             camera_detection_1.position.x,
-            camera_msg.detections[0].results[0].pose.pose.position.x,
+            in_pos_1.z,
             places=2,
-            msg="Detection 1 position X should match camera",
+            msg="Detection 1 position X should match optical->link conversion",
         )
         self.assertAlmostEqual(
             camera_detection_1.position.y,
-            camera_msg.detections[0].results[0].pose.pose.position.y,
+            -in_pos_1.x,
             places=2,
-            msg="Detection 1 position Y should match camera",
+            msg="Detection 1 position Y should match optical->link conversion",
+        )
+        self.assertAlmostEqual(
+            camera_detection_1.position.z,
+            -in_pos_1.y,
+            places=2,
+            msg="Detection 1 position Z should match optical->link conversion",
         )
 
         # Verify the second detection
@@ -171,17 +177,24 @@ class TestCameraNode(unittest.TestCase):
             msg="Detection 2 results should retain class ID",
         )
         # Position comes from results[0].pose.pose.position in Detection3D
+        in_pos_2 = camera_msg.detections[1].results[0].pose.pose.position
         self.assertAlmostEqual(
             camera_detection_2.position.x,
-            camera_msg.detections[1].results[0].pose.pose.position.x,
+            in_pos_2.z,
             places=2,
-            msg="Detection 2 position X should match camera",
+            msg="Detection 2 position X should match optical->link conversion",
         )
         self.assertAlmostEqual(
             camera_detection_2.position.y,
-            camera_msg.detections[1].results[0].pose.pose.position.y,
+            -in_pos_2.x,
             places=2,
-            msg="Detection 2 position Y should match camera",
+            msg="Detection 2 position Y should match optical->link conversion",
+        )
+        self.assertAlmostEqual(
+            camera_detection_2.position.z,
+            -in_pos_2.y,
+            places=2,
+            msg="Detection 2 position Z should match optical->link conversion",
         )
 
 

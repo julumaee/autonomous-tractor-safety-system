@@ -170,9 +170,10 @@ class TestRadarNode(unittest.TestCase):
         )
         self.assertAlmostEqual(
             radar_detection.position.y,
-            y,
+            -y,
             places=2,
-            msg="Fused position Y should match radar",
+            msg="Fused position Y should match radar"
+            "and sign should be converted to match ROS-style.",
         )
         self.assertEqual(
             radar_detection.speed, speed, msg="Fused speed should match radar"

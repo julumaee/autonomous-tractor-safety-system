@@ -29,13 +29,16 @@ class RadarNode(Node):
         self.declare_parameter("can_channel", "can0")
         self.declare_parameter("frame_timeout", 0.5)  # seconds
         self.declare_parameter("poll_period", 0.01)  # seconds
-        self.declare_parameter("min_confidence_percent", 90)   # 0..100
-        self.declare_parameter("min_height_m", 0.6)            # meters
+        self.declare_parameter("min_height_m", 0.5)            # meters
         self.declare_parameter("use_abs_height", True)         # safer default
+        # Some radars report lateral distance with +y meaning "right".
+        # ROS REP-103 convention for base-like frames is +y "left".
+        # Set to -1.0 to flip sensor lateral axis to ROS convention.
+        self.declare_parameter("lateral_sign", -1.0)
 
-        self.min_confidence_percent = float(self.get_parameter("min_confidence_percent").value)
         self.min_height_m = float(self.get_parameter("min_height_m").value)
         self.use_abs_height = bool(self.get_parameter("use_abs_height").value)
+        self.lateral_sign = float(self.get_parameter("lateral_sign").value)
 
         self.can_channel = self.get_parameter("can_channel").value
 
@@ -71,6 +74,8 @@ class RadarNode(Node):
             if param.name == "can_channel":
                 self.can_channel = param.value
                 self._connect_to_can_bus()
+            elif param.name == "lateral_sign":
+                self.lateral_sign = float(param.value)
         return SetParametersResult(successful=True)
 
     def poll_can(self):
@@ -158,6 +163,7 @@ class RadarNode(Node):
 
             # Lateral distance
             dist_lat = (((frame0[2] & 0x07) << 8) | frame0[3]) * 0.05 - 50
+            dist_lat = self.lateral_sign * dist_lat
 
             # distance = (dist_long ** 2 + dist_lat ** 2) ** 0.5
             # self.get_logger().info(f'Distance={distance:.2f}')  # Debugging info
@@ -176,9 +182,6 @@ class RadarNode(Node):
 
             z_for_filter = abs(height) if self.use_abs_height else height
 
-            if confidence < self.min_confidence_percent:
-                return
-
             if z_for_filter < self.min_height_m:
                 return
 
@@ -193,6 +196,7 @@ class RadarNode(Node):
             radar_detection_msg.position.z = height
             radar_detection_msg.speed = vrel_long
             radar_detection_msg.distance = (dist_long**2 + dist_lat**2) ** 0.5
+            radar_detection_msg.confidence_percent = float(confidence)
 
             self.publisher_.publish(radar_detection_msg)
             # self.get_logger().info(
