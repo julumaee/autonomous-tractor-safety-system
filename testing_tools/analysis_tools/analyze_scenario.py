@@ -61,7 +61,7 @@ class AnalysisConfig:
     )
     use_header_time: bool = True  # use header_t for analysis timestamps
     fov_x_min: float = 0.0  # [m] in front of tractor
-    fov_x_max: float = 30.0  # [m]
+    fov_x_max: float = 35.0  # [m]
     fov_half_angle_deg: float = 60.0  # [deg] half-angle around +x
 
 
@@ -98,13 +98,33 @@ def load_raw_detections(path: str) -> pd.DataFrame:
     CAMERA_TO_BODY_DY = 0.0  # assume centered
 
     if not df_camera.empty:
-        old_x = df_camera["x"].to_numpy()
-        old_y = df_camera["y"].to_numpy()
-        old_z = df_camera["z"].to_numpy()
+        if "z" not in df_camera.columns:
+            raise ValueError("camera rows require 'z' column in raw detections")
 
-        df_camera["x"] = old_z + CAMERA_TO_BODY_DX
-        df_camera["y"] = -old_x - CAMERA_TO_BODY_DY
-        df_camera["z"] = -old_y
+        old_x = pd.to_numeric(df_camera["x"], errors="coerce").to_numpy(dtype=float)
+        old_y = pd.to_numeric(df_camera["y"], errors="coerce").to_numpy(dtype=float)
+        old_z = pd.to_numeric(df_camera["z"], errors="coerce").to_numpy(dtype=float)
+
+        # Real-world logger logs /camera_detections which are published in camera_link
+        # (x forward, y left, z up) by camera_interface/camera_node.py.
+        # Older logs / alternative pipelines may have optical axes in the raw CSV:
+        #   optical: x right, y down, z forward.
+        # Auto-detect by checking whether forward axis dominates in x (camera_link)
+        # or in z (optical).
+        med_abs_x = float(np.nanmedian(np.abs(old_x)))
+        med_abs_z = float(np.nanmedian(np.abs(old_z)))
+        looks_optical = bool(med_abs_z > 1.5 * med_abs_x)
+
+        if looks_optical:
+            # Optical (x right, y down, z forward) -> camera_link/body-like (x forward, y left, z up)
+            df_camera["x"] = old_z + CAMERA_TO_BODY_DX
+            df_camera["y"] = -old_x - CAMERA_TO_BODY_DY
+            df_camera["z"] = -old_y
+        else:
+            # Already camera_link/body-like; only apply static body offset.
+            df_camera["x"] = old_x + CAMERA_TO_BODY_DX
+            df_camera["y"] = old_y - CAMERA_TO_BODY_DY
+            df_camera["z"] = old_z
 
     return df_radar, df_camera
 
@@ -802,9 +822,40 @@ def plot_xy(
             # Avoid a massive legend; keep a single entry instead.
             plt.scatter([], [], marker=".", color="k", s=10, label=f"Tracks ({n_tracks} total)")
 
+    def _plot_gt_trajectory(*dfs: pd.DataFrame):
+        """Plot a subtle GT trajectory line if gt_x_body/gt_y_body are available."""
+        for df in dfs:
+            if df is None or df.empty:
+                continue
+            if "gt_x_body" not in df.columns or "gt_y_body" not in df.columns:
+                continue
+
+            work = df.copy()
+            x_gt = pd.to_numeric(work["gt_x_body"], errors="coerce")
+            y_gt = pd.to_numeric(work["gt_y_body"], errors="coerce")
+            mask = x_gt.notna() & y_gt.notna()
+            if not mask.any():
+                continue
+
+            work = work.loc[mask, :].copy()
+            if "header_t" in work.columns:
+                work["header_t"] = pd.to_numeric(work["header_t"], errors="coerce")
+                work = work.sort_values("header_t")
+
+            plt.plot(
+                work["gt_y_body"],
+                work["gt_x_body"],
+                color="black",
+                linewidth=1.0,
+                alpha=0.35,
+                label="GT trajectory",
+            )
+            return
+
     # 1) raw + fused + GT
+    plt.figure(figsize=(8, 12))
+    _plot_gt_trajectory(fused_df_with_gt, tracks_df)
     if scenario in ("S1", "S2", "S4"):
-        plt.figure(figsize=(8, 12))
         plt.scatter(
             fused_df_with_gt["gt_y_body"],
             fused_df_with_gt["gt_x_body"],
@@ -870,8 +921,9 @@ def plot_xy(
     plt.close()
 
     # 2) GT + fused + tracks
+    plt.figure(figsize=(8, 12))
+    _plot_gt_trajectory(fused_df_with_gt, tracks_df)
     if scenario in ("S1", "S2", "S4"):
-        plt.figure(figsize=(8, 12))
         plt.scatter(
             fused_df_with_gt["gt_y_body"],
             fused_df_with_gt["gt_x_body"],
@@ -921,8 +973,9 @@ def plot_xy(
     plt.close()
 
     # 3) GT + tracks
+    plt.figure(figsize=(8, 12))
+    _plot_gt_trajectory(tracks_df, fused_df_with_gt)
     if scenario in ("S1", "S2", "S4"):
-        plt.figure(figsize=(8, 12))
         plt.scatter(
             tracks_df["gt_y_body"],
             tracks_df["gt_x_body"],

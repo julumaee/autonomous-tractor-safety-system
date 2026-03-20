@@ -2,7 +2,7 @@
 
 ## What You Need
 
-- One person to act as target (you!)
+- One person to act as target
 - Measuring tape to mark positions (5m, 10m, 15m from tractor)
 - ~10 minutes
 

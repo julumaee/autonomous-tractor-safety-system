@@ -82,6 +82,18 @@ if ! command -v ros2 &>/dev/null; then
   exit 1
 fi
 
+ensure_ros_domain() {
+  local desired_domain="0"
+  if [[ "${ROS_DOMAIN_ID:-}" != "${desired_domain}" ]]; then
+    export ROS_DOMAIN_ID="${desired_domain}"
+  fi
+  # Restart the ROS 2 daemon so discovery uses this environment.
+  ros2 daemon stop &>/dev/null || true
+  ros2 daemon start &>/dev/null || true
+}
+
+ensure_ros_domain
+
 ROS2_PKG_LIST="$(ros2 pkg list 2>/dev/null || true)"
 
 # Prefer this workspace overlay when available.
@@ -149,8 +161,8 @@ NTRIP_AUTHENTICATE=false
 NTRIP_HOST="rtk2go.com"
 NTRIP_PORT=2101
 NTRIP_MOUNTPOINT="Ranta"
-NTRIP_USERNAME=""
-NTRIP_PASSWORD=""
+NTRIP_USERNAME="eemil.kulmala@hotmail.com"
+NTRIP_PASSWORD="none"
 NTRIP_VERSION="${NTRIP_VERSION_ARG:-${NTRIP_VERSION:-}}"
 
 if $NO_NTRIP; then
@@ -163,8 +175,10 @@ else
     NTRIP_PORT=${NTRIP_PORT_IN:-2101}
     read -r -p "NTRIP mountpoint [${NTRIP_MOUNTPOINT}]: " NTRIP_MOUNTPOINT_IN
     NTRIP_MOUNTPOINT=${NTRIP_MOUNTPOINT_IN:-$NTRIP_MOUNTPOINT}
-    read -r -p "NTRIP username (email for rtk2go.com; optional for some public casters): " NTRIP_USERNAME
-    read -r -s -p "NTRIP password (required by this ntrip_client when authenticating; can be any non-empty string for some casters): " NTRIP_PASSWORD
+    read -r -p "NTRIP username (email for rtk2go.com; optional for some public casters) [${NTRIP_USERNAME}]: " NTRIP_USERNAME_IN
+    NTRIP_USERNAME=${NTRIP_USERNAME_IN:-$NTRIP_USERNAME}
+    read -r -s -p "NTRIP password (required by this ntrip_client when authenticating; can be any non-empty string for some casters) [${NTRIP_PASSWORD}]: " NTRIP_PASSWORD_IN
+    NTRIP_PASSWORD=${NTRIP_PASSWORD_IN:-$NTRIP_PASSWORD}
     echo ""
   else
     NTRIP_HOST="${NTRIP_HOST:-rtk2go.com}"
