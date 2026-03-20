@@ -130,7 +130,7 @@
 
     <!-- LIDAR (GPU-based; needed in Harmonic) -->
     <link name="lidar_link">
-      <pose>0.7 0 0.7 0 0 0</pose>
+      <pose>0.7 0 0.7 0 0 0.1</pose>
       <inertial><mass>0.1</mass></inertial>
       <collision name="lidar_col">
         <geometry><sphere><radius>0.02</radius></sphere></geometry>
@@ -166,7 +166,7 @@
 
     <!-- RGB + Depth camera on a mast -->
     <link name="camera_link">
-      <pose>0.5 0 0.9 0 0 0</pose>
+      <pose>0.5 0 0.9 0 0 0.1</pose>
       <inertial><mass>0.1</mass></inertial>
       <collision name="cam_col">
         <geometry><box><size>0.02 0.02 0.02</size></box></geometry>

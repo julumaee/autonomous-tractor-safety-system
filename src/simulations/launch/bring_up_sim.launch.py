@@ -71,7 +71,7 @@ def generate_launch_description():
     # Perception glue
     d2d_topic = DeclareLaunchArgument("dets2d_topic", default_value="/yolo/result")
     spatial_out_topic = DeclareLaunchArgument(
-        "spatial_out_topic", default_value="/color/yolov4_Spatial_detections"
+        "spatial_out_topic", default_value="/oak/nn/spatial_detections"
     )
     use_d2d_relay = DeclareLaunchArgument("use_d2d_relay", default_value="true")
 

@@ -256,6 +256,7 @@ class SimpleLidarToRadar(Node):
             out.position.z = float(zb)
             out.distance = float(dist)  # meters
             out.speed = float(speed_mps)  # m/s
+            out.confidence_percent = 100.0
             self.pub.publish(out)
 
 

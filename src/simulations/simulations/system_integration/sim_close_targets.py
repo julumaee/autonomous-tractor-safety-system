@@ -176,6 +176,7 @@ class SyntheticTargetsPublisher(Node):
         msg.position = Point(x=float(x), y=float(y), z=0.0)
         msg.distance = float(math.hypot(x, y))
         msg.speed = float(radial_speed)
+        msg.confidence_percent = 100.0
         self.pub_rad.publish(msg)
 
         self.get_logger().info(

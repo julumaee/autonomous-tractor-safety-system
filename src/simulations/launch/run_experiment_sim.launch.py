@@ -51,6 +51,15 @@ def generate_launch_description():
         description="Path to parameters YAML",
     )
 
+    use_measurement_covariance_models_arg = DeclareLaunchArgument(
+        "use_measurement_covariance_models",
+        default_value="true",
+        description=(
+            "If true, kf_tracker uses range/bearing-based measurement covariance models. "
+            "If false, uses constant per-source covariance (R_meas_*_xy)."
+        ),
+    )
+
     bring_up_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_share, "launch", "bring_up_sim.launch.py")
@@ -74,6 +83,9 @@ def generate_launch_description():
             "start_safety_monitor": "false",
             "start_radar": "false",
             "start_control": "false",
+            "use_measurement_covariance_models": LaunchConfiguration(
+                "use_measurement_covariance_models"
+            ),
             "camera_tf_x": "0.5",
             "camera_tf_y": "0.0",
             "camera_tf_z": "0.9",
@@ -132,6 +144,7 @@ def generate_launch_description():
             use_sim_time_arg,
             scenario_arg,
             params_arg,
+            use_measurement_covariance_models_arg,
             LogInfo(
                 msg=[
                     "Launching full experiment for scenario ",

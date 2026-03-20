@@ -138,6 +138,7 @@ class TargetSimulationNode(Node):
         radar_detection.distance = distance
         radar_detection.position = target_position_world
         radar_detection.speed = speed
+        radar_detection.confidence_percent = 100.0
         self.radar_publisher.publish(radar_detection)
         self.get_logger().info(f"Published radar detection with distance {distance}")
 

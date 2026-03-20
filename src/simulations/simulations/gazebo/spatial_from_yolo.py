@@ -14,11 +14,17 @@
 
 import numpy as np
 import rclpy
-from depthai_ros_msgs.msg import SpatialDetection, SpatialDetectionArray
+from geometry_msgs.msg import Point, Vector3
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
 from ultralytics_ros.msg import YoloResult
-from vision_msgs.msg import BoundingBox2D, Detection2DArray, ObjectHypothesis
+from vision_msgs.msg import (
+    BoundingBox2D,
+    Detection2DArray,
+    Detection3D,
+    Detection3DArray,
+    ObjectHypothesisWithPose,
+)
 
 
 class SpatialFromYolo(Node):
@@ -30,7 +36,7 @@ class SpatialFromYolo(Node):
         )  # YoloResult or Detection2DArray
         self.declare_parameter("depth_topic", "/sim/cam/depth")  # 32FC1
         self.declare_parameter("info_topic", "/sim/cam/camera_info")
-        self.declare_parameter("out_topic", "/color/yolov4_Spatial_detections")
+        self.declare_parameter("out_topic", "/oak/nn/spatial_detections")
         self.declare_parameter("sample_fraction", 0.2)  # central window % of bbox
 
         self.depth = None
@@ -50,10 +56,10 @@ class SpatialFromYolo(Node):
         self.create_subscription(YoloResult, dets_topic, self.on_yolo_result, qos)
 
         self.pub = self.create_publisher(
-            SpatialDetectionArray, self.get_parameter("out_topic").value, 10
+            Detection3DArray, self.get_parameter("out_topic").value, 10
         )
         self.get_logger().info(
-            "Publishing SpatialDetectionArray on" "/color/yolov4_Spatial_detections"
+            f"Publishing Detection3DArray on {self.get_parameter('out_topic').value}"
         )
 
     def on_info(self, msg: CameraInfo):
@@ -111,7 +117,7 @@ class SpatialFromYolo(Node):
         fx, fy = float(self.K[0, 0]), float(self.K[1, 1])
         cx, cy = float(self.K[0, 2]), float(self.K[1, 2])
 
-        out = SpatialDetectionArray()
+        out = Detection3DArray()
         out.header = msg.header
         out.header.frame_id = self.cam_frame
 
@@ -142,26 +148,37 @@ class SpatialFromYolo(Node):
             X = (u - cx) * Z / fx
             Y = (v - cy) * Z / fy
 
-            sd = SpatialDetection()
-            sd.bbox.center.position.x = u
-            sd.bbox.center.position.y = v
-            sd.bbox.size_x = w
-            sd.bbox.size_y = h
-            # copy first hypothesis if present
+            # Create Detection3D message
+            detection3d = Detection3D()
+            detection3d.header = msg.header
+            detection3d.header.frame_id = self.cam_frame
+
+            # Set 3D position in results[0].pose.pose.position
+            pos = Point()
+            pos.x = X
+            pos.y = Y
+            pos.z = Z
+
+            hyp = ObjectHypothesisWithPose()
+
+            # Copy class/score from det.results[0] (which is usually also ObjectHypothesisWithPose)
             if getattr(det, "results", None):
                 r0 = det.results[0]
-                hyp = ObjectHypothesis()
-                if hasattr(r0, "hypothesis"):
-                    hyp.class_id = r0.hypothesis.class_id
-                    hyp.score = r0.hypothesis.score
-                else:
-                    hyp.class_id = r0.class_id
-                    hyp.score = r0.score
-                sd.results.append(hyp)
-            sd.position.x = X
-            sd.position.y = Y
-            sd.position.z = Z
-            out.detections.append(sd)
+                hyp.hypothesis.class_id = r0.hypothesis.class_id
+                hyp.hypothesis.score = r0.hypothesis.score
+
+            # Put your computed XYZ into PoseWithCovariance
+            hyp.pose.pose.position.x = X
+            hyp.pose.pose.position.y = Y
+            hyp.pose.pose.position.z = Z
+            # (orientation/covariance can stay default if you don't have them)
+
+            detection3d.results.append(hyp)
+
+            # Also set bbox for completeness
+            detection3d.bbox.center.position = pos
+            detection3d.bbox.size = Vector3(x=0.0, y=0.0, z=0.0)
+            out.detections.append(detection3d)
 
         if out.detections:
             self.pub.publish(out)

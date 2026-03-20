@@ -34,7 +34,7 @@ class DepthDetectionsToCamera(Node):
         self.declare_parameter("dets_topic", "/sim/cam/detections2d")
         self.declare_parameter("depth_topic", "/sim/cam/depth")
         self.declare_parameter("info_topic", "/sim/cam/camera_info")
-        self.declare_parameter("camera_frame", "camera_optical_frame")
+        self.declare_parameter("camera_frame", "camera_link")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter(
             "depth_encoding", "32FC1"

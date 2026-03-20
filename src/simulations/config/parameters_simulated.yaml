@@ -34,6 +34,7 @@ kf_tracker:
   ros__parameters:
     enable_ego_drag: True
     use_sim_time: True
+    use_measurement_covariance_models: True
 
 radar_node:
   ros__parameters:

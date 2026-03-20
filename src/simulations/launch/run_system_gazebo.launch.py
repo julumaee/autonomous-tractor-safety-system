@@ -50,6 +50,18 @@ def generate_launch_description():
     params = LaunchConfiguration("params")
     start_safety_monitor = LaunchConfiguration("start_safety_monitor")
 
+    use_measurement_covariance_models_arg = DeclareLaunchArgument(
+        "use_measurement_covariance_models",
+        default_value="true",
+        description=(
+            "If true, kf_tracker uses range/bearing-based measurement covariance models. "
+            "If false, uses constant per-source covariance (R_meas_*_xy)."
+        ),
+    )
+    use_measurement_covariance_models = LaunchConfiguration(
+        "use_measurement_covariance_models"
+    )
+
     # List of all nodes to launch
     nodes = [
         # Camera Node (Processes real or simulated camera detections)
@@ -73,7 +85,12 @@ def generate_launch_description():
             package="sensor_fusion",
             executable="kf_tracker",
             name="kf_tracker",
-            parameters=[params],
+            parameters=[
+                params,
+                {
+                    "use_measurement_covariance_models": use_measurement_covariance_models
+                },
+            ],
             output="screen",
         ),
         # Safety Monitor (Monitors fused detections and controls vehicle state)
@@ -102,6 +119,7 @@ def generate_launch_description():
         [
             params_arg,
             start_safety_monitor_arg,
+            use_measurement_covariance_models_arg,
             LogInfo(msg="Launching all nodes..."),
             *nodes,
             *shutdown_handlers,
