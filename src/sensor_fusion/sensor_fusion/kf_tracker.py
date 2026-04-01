@@ -512,23 +512,19 @@ class EgoKFTracker(Node):
         """
         Perform all operations in the timer loop.
 
-        1. Ego update
-        2. Data association + KF predict/update (to measurement timestamps)
-        3. Track management (miss/age/deletion)
-        4. Publish (predict-to-now for output only; does not mutate track state)
+        1. Data association + KF predict/update (to measurement timestamps)
+        2. Track management (miss/age/deletion)
+        3. Publish (predict-to-now for output only; does not mutate track state)
         """
         now = self.get_clock().now().nanoseconds * 1e-9
         if self.last_timer_stamp is None:
             self.last_timer_stamp = now
 
-        # 1. Ego pose is integrated from /ego_motion timestamps.
-        #    (Detections are transformed using pose-at-stamp from the history.)
-
         # Reset update flags for this cycle
         for tr in self.tracks:
             tr.was_updated = False
 
-        # 2. Data association & updates using buffered detections
+        # 1. Data association & updates using buffered detections
         meas = getattr(self, "_meas_buf", [])
         if meas:
             self.associate_and_update(meas)
@@ -537,12 +533,12 @@ class EgoKFTracker(Node):
             if not tr.was_updated:
                 tr.miss += 1
 
-        # 3. Aging / deletion
+        # 2. Aging / deletion
         self.maintain_tracks()
         # Age tracks by timer cycles
         for tr in self.tracks:
             tr.age += 1
-        # 4. Publish
+        # 3. Publish
         self.publish_tracks()
         self.last_timer_stamp = now
         # for tr in self.tracks:
