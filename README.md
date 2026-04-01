@@ -27,6 +27,13 @@ Package/directories:
 - `src/simulations/` – Gazebo models, worlds, launch and logging tools
 - `testing_tools/` – scripts for running test scenarios and analyzing the results
 
+Package documentation:
+
+- [docs/radar_interface.md](docs/radar_interface.md) – radar interface package documentation
+- [docs/camera_interface.md](docs/camera_interface.md) – camera interface package documentation
+- [docs/sensor_fusion.md](docs/sensor_fusion.md) – fusion and tracking package documentation
+- [docs/safety_monitor.md](docs/safety_monitor.md) – safety monitor package documentation
+
 ---
 
 ## Prerequisites
@@ -85,8 +92,9 @@ The camera interface is configured for the **OAK-D S2** camera with `depthai-ros
 `camera_interface` typically:
 
 - Subscribes to camera detection topics (with spatial/depth information)
-- Converts detections into **3D target positions** in the tractor base frame
-- Publishes a list of camera targets for fusion/tracking
+- Converts detections into project-specific `CameraDetection` messages
+- Converts coordinates from the camera optical frame to `camera_link`
+- Publishes individual camera detections for fusion/tracking
 
 The OAK-D's built-in neural network eliminates the need for external target detection when using real hardware.
 
@@ -98,7 +106,7 @@ The radar interface expects SR75 track data over CAN.
 
 - Reads CAN frames from `can0`
 - Decodes SR75 “track data information” messages
-- Publishes radar target lists in the tractor base frame
+- Publishes individual `RadarDetection` messages in `radar_link`
 
 To use a different radar, implement a compatible interface node that outputs the same target message type.
 
@@ -334,12 +342,12 @@ ros2 launch simulations bring_up_sim.launch.py
 #   camera_tf_x/y/z/roll/pitch/yaw:=...   (base_link -> camera_link)
 #   radar_tf_x/y/z/roll/pitch/yaw:=...    (base_link -> radar_link)
 
-# Recommended: full system (perception + safety monitor + control)
+# Full system (perception + safety monitor + control)
 ros2 launch tractor_safety_system_launch safety_system_core.launch.py \
   start_camera_driver:=true \
   can_channel:=can0 \
   camera_tf_x:=0.5 camera_tf_y:=0.0 camera_tf_z:=0.9 \
-  camera_tf_roll:=-1.5708 camera_tf_pitch:=0.0 camera_tf_yaw:=-1.5708 \
+  camera_tf_roll:=0.0 camera_tf_pitch:=0.0 camera_tf_yaw:=0.0 \
   radar_tf_x:=0.6 radar_tf_y:=0.0 radar_tf_z:=0.6 \
   radar_tf_roll:=0.0 radar_tf_pitch:=0.0 radar_tf_yaw:=0.0
 
@@ -351,19 +359,15 @@ ros2 launch tractor_safety_system_launch safety_system_core.launch.py \
 # ros2 launch tractor_safety_system_launch safety_system_core.launch.py \
 #   start_control:=false start_safety_monitor:=false
 
-# Alternative: Launch perception stack only (sensor interfaces + fusion + tracking)
+# Perception stack only (sensor interfaces + fusion + tracking)
 ros2 launch tractor_safety_system_launch perception_stack.launch.py \
   start_camera_driver:=true \
   can_channel:=can0 \
-  camera_tf_x:=0.5 camera_tf_y:=0.0 camera_tf_z:=0.9 \
-  camera_tf_roll:=-1.5708 camera_tf_pitch:=0.0 camera_tf_yaw:=-1.5708 \
-  radar_tf_x:=0.6 radar_tf_y:=0.0 radar_tf_z:=0.6
-
-# Alternative: Launch safety stack only (fusion + safety monitor + control)
-ros2 launch tractor_safety_system_launch safety_stack.launch.py \
-  start_tracker:=true start_safety_monitor:=true start_control:=true
+  tf_file:=testing_tools/calibration_log/calibration_tf.txt
 
 ```
+
+> Note: `perception_stack.launch.py` supports `tf_file:=...` directly. `safety_system_core.launch.py` currently exposes the individual `camera_tf_*` and `radar_tf_*` arguments instead.
 
 ### YOLOv8 object detection (ultralytics-ros) - Simulation Only
 
@@ -478,6 +482,8 @@ source install/setup.bash
 
 bash testing_tools/run_all_simulation_scenarios.sh
 ```
+
+> Note: [testing_tools/run_all_simulation_scenarios.sh](testing_tools/run_all_simulation_scenarios.sh) currently contains a hard-coded workspace setup line (`~/playground/install/setup.bash`). Update that path to match your local workspace before using the script as-is.
 
 ## See also (real-world)
 
