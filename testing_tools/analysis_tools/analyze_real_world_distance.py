@@ -605,8 +605,8 @@ def main() -> None:
     parser.add_argument(
         "--gps-smooth-window-s",
         type=float,
-        default=2.5,
-        help="Time window in seconds for GPS position smoothing before distance GT generation. Set <=0 to disable. Default: 2.5",
+        default=0.0,
+        help="Time window in seconds for GPS position smoothing before distance GT generation. Set <=0 to disable. Default: 0 (disabled).",
     )
     parser.add_argument(
         "--axis-gps-file",

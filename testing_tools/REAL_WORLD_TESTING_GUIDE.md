@@ -161,254 +161,139 @@ Working width $W$ (tractor + implement) boundaries in the tractor body frame con
 
 ### 4) Permissions + dependencies
 
-```bash
-sudo apt update
-sudo apt install -y can-utils
-sudo apt install -y ros-jazzy-ntrip-client
+# Real-World Testing Guide (Current)
 
-# Serial permissions for GPS (then log out/in)
-sudo usermod -a -G dialout $USER
+This guide reflects the current scripts and launch files in this repository.
+
+## 1) One-time setup
+
+```bash
+cd ~/autonomous-tractor-safety-system
+colcon build
+source install/setup.bash
 ```
 
----
+Install required system tools if missing:
+```bash
+sudo apt install -y can-utils ros-jazzy-ntrip-client
+```
 
-## Test Execution Instructions
+## 2) Calibration (recommended before field tests)
 
-### Test cases
+Use the calibration workflow in [CALIBRATION.md](CALIBRATION.md). The output file used by test launch scripts is:
 
-This guide assumes **standing pedestrian only** and **moving tractor approaching**.
+- `testing_tools/calibration_log/calibration_tf.txt`
 
-Definitions:
-- **Centerline:** tractor forward path (+X direction from `base_link`)
-- **Working width:** tractor width + implement width (lateral hazard zone)
+## 3) Live real-world test workflow
 
-Repeat each case **7 times**.
-
-S1. **Centerline (standing pedestrian)**
-- Pedestrian stands on the centerline, directly ahead.
-- Suggested start distance: 30 m.
-
-S2. **Working-width edges (standing pedestrian)**
-- Pedestrian stands near the left boundary ($Y = +W/2$).
-- Repeat on the right boundary ($Y = -W/2$).
-
-S3. **Outside working width (standing pedestrian)**
-- Pedestrian stands outside the working width (left and right).
-- Suggested offsets: 1–2 m outside boundary, start distances 30 m and 20 m.
-
-Record for each run:
-- Scenario + repeat index
-- Pedestrian lateral position (m)
-- Tractor speed (m/s)
-- Weather/lighting
-- Any warnings/errors
-
----
-
-### Script-based workflow (recommended)
-
-**1) GPS + (optional) NTRIP**
+### Terminal A: GPS + optional NTRIP
 
 ```bash
 cd ~/autonomous-tractor-safety-system/testing_tools
 ./gps_rtk_start.sh
-ros2 topic echo /gps/fix --once
+# or: ./gps_rtk_start.sh --no-ntrip
 ```
 
-Optional RTK verification:
-
-```bash
-ros2 topic info /rtcm -v
-ros2 topic echo /rxmrtcm --once
-```
-
-**2) Validate system**
-
-Before validation, bring up can:
+### Terminal B: CAN + validation
 
 ```bash
 cd ~/autonomous-tractor-safety-system/testing_tools
 ./setup_can.sh
-```
-```bash
-cd ~/autonomous-tractor-safety-system/testing_tools
 ./validate_system.sh
 ```
 
-**3) Launch system + logger**
-
-Use calibrated TF values here whenever available:
+### Terminal C: Start test stack (interactive)
 
 ```bash
 cd ~/autonomous-tractor-safety-system/testing_tools
-./launch_test.sh field_test_S1 /gps/fix \
-  <camera_x> <camera_y> <camera_z> <camera_roll> <camera_pitch> <camera_yaw> \
-  <radar_x>  <radar_y>  <radar_z>  <radar_roll>  <radar_pitch>  <radar_yaw>
+./launch_test.sh
 ```
 
-**4) Monitor**
+`launch_test.sh` now prompts for:
+- test name
+- GPS topic (default `/navpvt`)
+- start camera driver or not
+- tracker covariance model toggle
+- TF source (calibration file vs defaults)
 
-```bash
-cd ~/autonomous-tractor-safety-system/testing_tools
-./monitor_test.sh
-```
+The launched stack includes real-world logging automatically (`real_world_logger`), producing files under:
+- `testing_tools/real_world_logs/`
 
----
+## 4) Replay workflow for bag batches
 
-### Manual workflow (optional)
+Recommended current replay method is stepwise/manual logger control:
 
-Use this when debugging or if your setup differs from the scripts.
-
-**CAN:**
-
-```bash
-cd ~/autonomous-tractor-safety-system/testing_tools
-sudo ./setup_can.sh can0 1000000
-candump can0
-```
-
-**GPS + NTRIP (integrated launch):**
+### Terminal A: perception stack for replay
 
 ```bash
 cd ~/autonomous-tractor-safety-system
 source install/setup.bash
 
-ros2 launch tractor_safety_system_launch gps_rtk_ublox_ntrip.launch.py \
-  gps_device:=/dev/ttyACM0 \
-  gps_baudrate:=115200 \
-  rtcm_topic:=/rtcm \
-  start_ntrip:=true \
-  ntrip_host:=rtk2go.com \
-  ntrip_port:=2101 \
-  ntrip_mountpoint:=Ranta \
-  ntrip_authenticate:=true \
-  ntrip_username:="YOUR_EMAIL" \
-  ntrip_password:="YOUR_PASSWORD"
+ros2 launch tractor_safety_system_launch perception_stack.launch.py \
+  start_radar:=false start_camera:=false publish_tf:=true \
+  tf_file:=testing_tools/calibration_log/replay_tf.txt
 ```
 
-**Main system:**
-
-```bash
-ros2 launch tractor_safety_system_launch real_world_test.launch.py \
-  test_name:=field_test_S1 \
-  gps_fix_topic:=/gps/fix \
-  camera_tf_x:=<camera_x> camera_tf_y:=<camera_y> camera_tf_z:=<camera_z> \
-  camera_tf_roll:=<camera_roll> camera_tf_pitch:=<camera_pitch> camera_tf_yaw:=<camera_yaw> \
-  radar_tf_x:=<radar_x> radar_tf_y:=<radar_y> radar_tf_z:=<radar_z> \
-  radar_tf_roll:=<radar_roll> radar_tf_pitch:=<radar_pitch> radar_tf_yaw:=<radar_yaw>
-```
-
-**Stopping + backup:**
+### Terminal B: play bags one-by-one
 
 ```bash
 cd ~/autonomous-tractor-safety-system/testing_tools
-ls -lh real_world_logs/
-wc -l real_world_logs/*.csv
-
-backup_dir=~/test_backups/$(date +%Y%m%d_%H%M%S)
-mkdir -p "$backup_dir"
-cp -r real_world_logs "$backup_dir"/
+./replay_bags_stepwise.sh
 ```
 
----
+For each bag, start logger manually in another terminal using suggested test name (for example `t2_3_replay`):
 
-## Post-Test Analysis
+```bash
+ros2 launch simulations real_world_logger.launch.py \
+  test_name:=t2_3_replay use_sim_time:=true
+```
 
-### Immediate integrity checks
+Stop logger after each run, then continue to next bag.
+
+## 5) Analysis
+
+### Distance-only real-world analysis (current main workflow)
 
 ```bash
 cd ~/autonomous-tractor-safety-system/testing_tools
-ls -lh real_world_logs/
-head -n 5 real_world_logs/raw_detections_*.csv
-head -n 5 real_world_logs/ego_motion_*.csv
+./analysis_tools/analyze_real_world_distance t1_2_replay
 ```
 
-### Scenario analysis (optional)
+For consistent axis across scenarios, use a `t1` GPS file as axis reference:
 
 ```bash
-cd ~/autonomous-tractor-safety-system/testing_tools
-mkdir -p plots
-
-TEST_NAME=field_test_S1
-
-python3 analysis_tools/analyze_scenario.py \
-  --scenario S1 \
-  --raw   "real_world_logs/raw_detections_${TEST_NAME}.csv" \
-  --fused "real_world_logs/fused_detections_${TEST_NAME}.csv" \
-  --tracks "real_world_logs/tracks_${TEST_NAME}.csv" \
-  --ego   "real_world_logs/ego_motion_${TEST_NAME}.csv" \
-  --out_prefix "plots/${TEST_NAME}"
+./analysis_tools/analyze_real_world_distance t3_4_replay \
+  --axis-gps-file real_world_logs/gps_truth_t1_2_replay.csv
 ```
 
-Note: update the static GT configuration inside `analysis_tools/analyze_scenario.py` to match your marked test geometry before trusting numeric metrics.
-
----
-
-## Command Reference
-
-### Core scripts
+### Legacy 2D analysis (kept)
 
 ```bash
-cd ~/autonomous-tractor-safety-system/testing_tools
-./gps_rtk_start.sh
-./validate_system.sh
-
-# Positions-only mode
-./launch_test.sh field_test_S1 /gps/fix 1.2 0.0 0.8 1.5 0.0 0.5
-
-# Full TF mode (recommended after calibration)
-./launch_test.sh field_test_S1 /gps/fix \
-  <camera_x> <camera_y> <camera_z> <camera_roll> <camera_pitch> <camera_yaw> \
-  <radar_x>  <radar_y>  <radar_z>  <radar_roll>  <radar_pitch>  <radar_yaw>
-
-./monitor_test.sh
-sudo ./setup_can.sh can0 1000000
+./analysis_tools/analyze_real_world t1_2_replay
 ```
 
-### Useful ROS checks
+## 6) Common troubleshooting
+
+### No nodes visible across terminals
 
 ```bash
+ros2 daemon stop
+ros2 daemon start
 ros2 node list
-ros2 topic list
-ros2 topic hz /radar_detections
-ros2 topic hz /camera_detections
-ros2 topic hz /fused_detections
-ros2 topic hz /tracked_detections
-ros2 topic hz /ego_motion
-ros2 topic echo /rosout --once
 ```
 
-### GPS + RTK verification
+Also ensure every terminal uses the same ROS environment (`install/setup.bash`, domain, RMW settings).
+
+### Validate logging output quickly
 
 ```bash
-ros2 topic echo /gps/fix --once
-ros2 topic info /rtcm -v
-ros2 topic echo /rxmrtcm --once
+cd ~/autonomous-tractor-safety-system/testing_tools
+ls -lh real_world_logs/
+head -n 3 real_world_logs/gps_truth_*.csv
+head -n 3 real_world_logs/fused_detections_*.csv
 ```
 
----
+## 7) Safety reminder
 
-## Safety Reminders
-
-This is a research prototype and is **not** safety-certified.
-
-Minimum rules:
-- Always have a trained safety operator in control.
-- Use a controlled area with clear exclusion zones.
-- Keep an emergency stop accessible and tested.
-- Start with low speeds and large clearances.
-- Stop immediately on any unexpected behavior, warnings, or missing sensor data.
-
----
-
-## Additional Resources
-
-- [Project README](../README.md)
-- [Calibration Guide](CALIBRATION.md)
-- Scripts:
-  - [gps_rtk_start.sh](gps_rtk_start.sh)
-  - [validate_system.sh](validate_system.sh)
-  - [launch_test.sh](launch_test.sh)
-  - [monitor_test.sh](monitor_test.sh)
-  - [setup_can.sh](setup_can.sh)
-- Analysis tools: [analysis_tools](analysis_tools)
+This is a research prototype, not safety-certified. Always use a controlled area, a human safety operator, and a tested emergency stop procedure.
+```

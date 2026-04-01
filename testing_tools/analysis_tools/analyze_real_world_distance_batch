@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+PY_SCRIPT="${SCRIPT_DIR}/analyze_real_world_distance_batch.py"
+
+if [[ ! -f "${PY_SCRIPT}" ]]; then
+  echo "ERROR: Expected ${PY_SCRIPT} to exist" >&2
+  exit 1
+fi
+
+PYTHON="python3"
+if [[ -x "${REPO_ROOT}/.venv/bin/python" ]]; then
+  PYTHON="${REPO_ROOT}/.venv/bin/python"
+fi
+
+exec "${PYTHON}" "${PY_SCRIPT}" "$@"
